@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS employees (
     phone         VARCHAR(30),
     email         VARCHAR(120),
     address       TEXT,
+    classification VARCHAR(20) DEFAULT 'Regular' CHECK (classification IN ('Regular','Non-Regular')),
+    pay_schedule  VARCHAR(20) DEFAULT 'Weekly' CHECK (pay_schedule IN ('Weekly','Semi-Monthly')),
     status        VARCHAR(20) DEFAULT 'Active' CHECK (status IN ('Active','On Leave','Resigned','Terminated')),
     photo_path    VARCHAR(255),
     created_at    TIMESTAMP DEFAULT NOW()
@@ -68,7 +70,6 @@ CREATE TABLE IF NOT EXISTS attendance (
     time_in     TIME,
     time_out    TIME,
     status      VARCHAR(20) DEFAULT 'Present' CHECK (status IN ('Present','Absent','Late','Half Day','On Leave')),
-    remarks     TEXT,
     recorded_by INT REFERENCES users(user_id),
     created_at  TIMESTAMP DEFAULT NOW(),
     UNIQUE(emp_id, attend_date)
@@ -97,10 +98,9 @@ CREATE TABLE IF NOT EXISTS payroll (
     sss             NUMERIC(10,2) DEFAULT 0,
     philhealth      NUMERIC(10,2) DEFAULT 0,
     pagibig         NUMERIC(10,2) DEFAULT 0,
-    tax             NUMERIC(10,2) DEFAULT 0,
     net_pay         NUMERIC(10,2) GENERATED ALWAYS AS (
                         basic_pay + overtime_pay + allowances
-                        - deductions - sss - philhealth - pagibig - tax
+                        - deductions - sss - philhealth - pagibig
                     ) STORED,
     status          VARCHAR(20) DEFAULT 'Draft' CHECK (status IN ('Draft','Approved','Paid')),
     created_at      TIMESTAMP DEFAULT NOW()
@@ -121,7 +121,6 @@ CREATE TABLE IF NOT EXISTS inventory (
     cat_id       INT REFERENCES inventory_categories(cat_id),
     unit         VARCHAR(30) DEFAULT 'pcs',
     quantity     INT DEFAULT 0,
-    reorder_lvl  INT DEFAULT 5,
     unit_cost    NUMERIC(10,2) DEFAULT 0,
     unit_price   NUMERIC(10,2) DEFAULT 0,
     supplier     VARCHAR(120),
@@ -194,16 +193,13 @@ CREATE TABLE IF NOT EXISTS billing (
     order_id     INT REFERENCES service_orders(order_id),
     cust_id      INT REFERENCES customers(cust_id),
     subtotal     NUMERIC(10,2) DEFAULT 0,
-    discount     NUMERIC(10,2) DEFAULT 0,
-    tax_rate     NUMERIC(5,2) DEFAULT 12,
-    tax_amount   NUMERIC(10,2) DEFAULT 0,
+    manpower     NUMERIC(10,2) DEFAULT 0,
     total        NUMERIC(10,2) DEFAULT 0,
     amount_paid  NUMERIC(10,2) DEFAULT 0,
     balance      NUMERIC(10,2) GENERATED ALWAYS AS (total - amount_paid) STORED,
     status       VARCHAR(20) DEFAULT 'Unpaid' CHECK (status IN ('Unpaid','Partial','Paid','Void')),
     payment_method VARCHAR(40),
     bill_date    DATE DEFAULT CURRENT_DATE,
-    due_date     DATE,
     created_at   TIMESTAMP DEFAULT NOW()
 );
 
@@ -257,14 +253,12 @@ ON CONFLICT (username) DO NOTHING;
 
 -- Departments
 INSERT INTO departments (dept_name) VALUES
-('Management'),('Mechanical'),('Electrical'),('Body & Paint'),('Parts & Inventory'),('Front Desk')
+('Management'),('Utility'),('Front Desk')
 ON CONFLICT (dept_name) DO NOTHING;
 
 -- Positions
 INSERT INTO positions (position_name, base_salary) VALUES
-('Shop Owner',85000),('General Manager',55000),('Senior Mechanic',28000),
-('Mechanic',22000),('Electrician',24000),('Painter',22000),
-('Parts Controller',20000),('Service Advisor',22000),('Cashier',18000)
+('Mechanic',22000),('Electrician',24000),('Painter',22000),('Cashier',18000)
 ON CONFLICT (position_name) DO NOTHING;
 
 -- Inventory Categories
@@ -281,13 +275,28 @@ INSERT INTO service_types (type_name, base_price) VALUES
 ON CONFLICT (type_name) DO NOTHING;
 
 -- Sample Employees
-INSERT INTO employees (emp_code, first_name, last_name, dept_id, position_id, hire_date, gender, phone, email, status)
+INSERT INTO employees (emp_code, first_name, last_name, dept_id, position_id, hire_date, gender, phone, email, classification, pay_schedule, status)
 VALUES
-('EMP-001','Juan','Dela Cruz',1,2,'2020-01-15','Male','09171234567','juan.dc@unocarshop.ph','Active'),
-('EMP-002','Maria','Santos',2,3,'2021-03-01','Female','09181234567','maria.s@unocarshop.ph','Active'),
-('EMP-003','Pedro','Reyes',2,4,'2022-06-10','Male','09191234567','pedro.r@unocarshop.ph','Active'),
-('EMP-004','Ana','Gomez',6,8,'2021-09-20','Female','09201234567','ana.g@unocarshop.ph','Active'),
-('EMP-005','Rizal','Bautista',5,7,'2020-11-05','Male','09211234567','rizal.b@unocarshop.ph','Active')
+('EMP-001','Juan','Dela Cruz',
+ (SELECT dept_id FROM departments WHERE dept_name='Management'),
+ (SELECT position_id FROM positions WHERE position_name='Cashier'),
+ '2020-01-15','Male','09171234567','juan.dc@unocarshop.ph','Regular','Weekly','Active'),
+('EMP-002','Maria','Santos',
+ (SELECT dept_id FROM departments WHERE dept_name='Utility'),
+ (SELECT position_id FROM positions WHERE position_name='Mechanic'),
+ '2021-03-01','Female','09181234567','maria.s@unocarshop.ph','Regular','Semi-Monthly','Active'),
+('EMP-003','Pedro','Reyes',
+ (SELECT dept_id FROM departments WHERE dept_name='Utility'),
+ (SELECT position_id FROM positions WHERE position_name='Electrician'),
+ '2022-06-10','Male','09191234567','pedro.r@unocarshop.ph','Non-Regular','Weekly','Active'),
+('EMP-004','Ana','Gomez',
+ (SELECT dept_id FROM departments WHERE dept_name='Front Desk'),
+ (SELECT position_id FROM positions WHERE position_name='Cashier'),
+ '2021-09-20','Female','09201234567','ana.g@unocarshop.ph','Regular','Weekly','Active'),
+('EMP-005','Rizal','Bautista',
+ (SELECT dept_id FROM departments WHERE dept_name='Utility'),
+ (SELECT position_id FROM positions WHERE position_name='Painter'),
+ '2020-11-05','Male','09211234567','rizal.b@unocarshop.ph','Non-Regular','Weekly','Active')
 ON CONFLICT (emp_code) DO NOTHING;
 
 -- Sample Customers

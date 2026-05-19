@@ -5,7 +5,7 @@ UnoCarshop ASMIS — Inventory (Integrated v2)
 Key changes:
 - Removed Consumables and Suspension categories
 - Fires inventory_changed + dashboard_refresh on all CRUD
-- Low stock alerts reflected on dashboard in real time
+- Out-of-stock alerts reflected on dashboard in real time
 - Parts used in service orders auto-deduct quantity via DB trigger
 """
 from PyQt5.QtWidgets import (
@@ -47,7 +47,7 @@ class InventoryPage(QWidget):
 
         stats = QHBoxLayout(); stats.setSpacing(12)
         self.s_total = StatCard("Total Items",  "0",  "📦", ORANGE)
-        self.s_low   = StatCard("Low Stock",    "0",  "⚠",  RED)
+        self.s_low   = StatCard("Out of Stock", "0",  "⚠",  RED)
         self.s_value = StatCard("Stock Value",  "₱0", "💰", GREEN)
         self.s_cats  = StatCard("Categories",   "0",  "🏷",  BLUE)
         for s in [self.s_total, self.s_low, self.s_value, self.s_cats]:
@@ -65,7 +65,7 @@ class InventoryPage(QWidget):
         self.cat_filter.currentIndexChanged.connect(self._filter)
 
         self.stock_filter = QComboBox()
-        self.stock_filter.addItems(["All Stock","⚠ Low Stock","✅ In Stock"])
+        self.stock_filter.addItems(["All Stock","⚠ Out of Stock","✅ In Stock"])
         self.stock_filter.setFixedHeight(38); self.stock_filter.setFixedWidth(140)
         self.stock_filter.setStyleSheet(self._cs())
         self.stock_filter.currentIndexChanged.connect(self._filter)
@@ -84,17 +84,16 @@ class InventoryPage(QWidget):
         layout.addLayout(toolbar)
 
         cols = ["Code","Item Name","Category","Unit","Qty",
-                "Reorder Lvl","Unit Cost","Unit Price","Supplier","Actions"]
+                "Unit Cost","Unit Price","Supplier","Actions"]
         self.table = StyledTable(cols)
         self.table.setColumnWidth(0,  90)
         self.table.setColumnWidth(1, 180)
         self.table.setColumnWidth(2, 120)
         self.table.setColumnWidth(3,  55)
         self.table.setColumnWidth(4,  55)
-        self.table.setColumnWidth(5,  80)
+        self.table.setColumnWidth(5,  90)
         self.table.setColumnWidth(6,  90)
-        self.table.setColumnWidth(7,  90)
-        self.table.setColumnWidth(8, 120)
+        self.table.setColumnWidth(7, 120)
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
 
@@ -129,8 +128,7 @@ class InventoryPage(QWidget):
             q = """
                 SELECT i.item_id, i.item_code, i.item_name,
                        COALESCE(c.cat_name,'—'), i.unit,
-                       i.quantity, i.reorder_lvl,
-                       i.unit_cost, i.unit_price, COALESCE(i.supplier,'')
+                       i.quantity, i.unit_cost, i.unit_price, COALESCE(i.supplier,'')
                 FROM inventory i
                 LEFT JOIN inventory_categories c ON i.cat_id=c.cat_id
                 WHERE i.status='Active'
@@ -141,16 +139,16 @@ class InventoryPage(QWidget):
                 s = f"%{search.lower()}%"; params += [s, s, s]
             if cat and cat != "All Categories":
                 q += " AND c.cat_name=%s"; params.append(cat)
-            if "Low Stock" in stock_filter:
-                q += " AND i.quantity<=i.reorder_lvl"
+            if "Out of Stock" in stock_filter:
+                q += " AND i.quantity<=0"
             elif "In Stock" in stock_filter:
-                q += " AND i.quantity>i.reorder_lvl"
+                q += " AND i.quantity>0"
             q += " ORDER BY i.item_code"
             cur.execute(q, params); rows = cur.fetchall()
 
             cur.execute("SELECT COUNT(*) FROM inventory WHERE status='Active'")
             total = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM inventory WHERE quantity<=reorder_lvl AND status='Active'")
+            cur.execute("SELECT COUNT(*) FROM inventory WHERE quantity<=0 AND status='Active'")
             low = cur.fetchone()[0]
             cur.execute("SELECT COALESCE(SUM(quantity*unit_cost),0) FROM inventory WHERE status='Active'")
             val = cur.fetchone()[0]
@@ -169,16 +167,16 @@ class InventoryPage(QWidget):
                 r = self.table.rowCount()
                 self.table.insertRow(r); self.table.setRowHeight(r, 38)
                 self._item_ids.append(rd[0])
-                low_flag = rd[5] <= rd[6]
+                low_flag = rd[5] <= 0
                 data = [rd[1], rd[2], rd[3], rd[4],
-                        rd[5], rd[6],
+                        rd[5],
+                        f"₱{float(rd[6]):,.2f}",
                         f"₱{float(rd[7]):,.2f}",
-                        f"₱{float(rd[8]):,.2f}",
-                        rd[9]]
+                        rd[8]]
                 for c, val_ in enumerate(data):
                     item = QTableWidgetItem(str(val_))
                     item.setTextAlignment(
-                        (Qt.AlignRight if c in (4,5,6,7) else Qt.AlignLeft) | Qt.AlignVCenter
+                        (Qt.AlignRight if c in (4,5,6) else Qt.AlignLeft) | Qt.AlignVCenter
                     )
                     if c == 4 and low_flag:
                         item.setForeground(QColor(RED))
@@ -195,9 +193,9 @@ class InventoryPage(QWidget):
                 btn_d.setStyleSheet("QPushButton{background:#ffebee;color:#c62828;border:1px solid #ef9a9a;border-radius:5px;font-size:11px;padding:0 8px;}QPushButton:hover{background:#ffcdd2;}")
                 btn_d.clicked.connect(lambda _, i=iid: self._delete_item(i))
                 al.addWidget(btn_e); al.addWidget(btn_d)
-                self.table.setCellWidget(r, 9, act)
+                self.table.setCellWidget(r, 8, act)
 
-            self.count_lbl.setText(f"Showing {len(rows)} item(s)  |  Low stock: {low}")
+            self.count_lbl.setText(f"Showing {len(rows)} item(s)  |  Out of stock: {low}")
         except Exception as e:
             error(self, "Load Error", str(e))
 
@@ -221,9 +219,9 @@ class InventoryPage(QWidget):
                     return
                 cur.execute("""
                     INSERT INTO inventory
-                    (item_code,item_name,cat_id,unit,quantity,reorder_lvl,
+                    (item_code,item_name,cat_id,unit,quantity,
                      unit_cost,unit_price,supplier,location)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, data)
                 conn.commit(); conn.close()
                 info(self, "Saved", "Item added to inventory.")
@@ -235,7 +233,7 @@ class InventoryPage(QWidget):
     def _edit_item(self, item_id):
         try:
             conn = get_connection(); cur = conn.cursor()
-            cur.execute("""SELECT item_code,item_name,cat_id,unit,quantity,reorder_lvl,
+            cur.execute("""SELECT item_code,item_name,cat_id,unit,quantity,
                                   unit_cost,unit_price,supplier,location
                            FROM inventory WHERE item_id=%s""", (item_id,))
             row = cur.fetchone(); conn.close()
@@ -251,7 +249,7 @@ class InventoryPage(QWidget):
                     error(self, "Duplicate Code", f"Item code '{data[0]}' already exists. Use a different code.")
                     return
                 cur.execute("""UPDATE inventory SET item_code=%s,item_name=%s,cat_id=%s,unit=%s,
-                    quantity=%s,reorder_lvl=%s,unit_cost=%s,unit_price=%s,supplier=%s,location=%s
+                    quantity=%s,unit_cost=%s,unit_price=%s,supplier=%s,location=%s
                     WHERE item_id=%s""", data+(item_id,))
                 conn.commit(); conn.close()
                 info(self, "Updated", "Item updated.")
@@ -301,24 +299,20 @@ class InventoryDialog(QDialog):
         self.f_unit  = QLineEdit(ex[3] if ex else "pcs")
         self.f_qty   = QSpinBox(); self.f_qty.setMaximum(999999)
         self.f_qty.setValue(int(ex[4]) if ex and ex[4] else 0)
-        self.f_reord = QSpinBox(); self.f_reord.setMaximum(9999)
-        self.f_reord.setValue(int(ex[5]) if ex and ex[5] else 5)
-
         def money(v=0):
             s = QDoubleSpinBox(); s.setMaximum(999999); s.setDecimals(2); s.setPrefix("₱ ")
             s.setValue(float(v) if v else 0); return s
 
-        self.f_cost  = money(ex[6] if ex else 0)
-        self.f_price = money(ex[7] if ex else 0)
-        self.f_supp  = QLineEdit(ex[8] if ex and ex[8] else "")
-        self.f_loc   = QLineEdit(ex[9] if ex and ex[9] else "")
+        self.f_cost  = money(ex[5] if ex else 0)
+        self.f_price = money(ex[6] if ex else 0)
+        self.f_supp  = QLineEdit(ex[7] if ex and ex[7] else "")
+        self.f_loc   = QLineEdit(ex[8] if ex and ex[8] else "")
 
         form.addRow("Item Code *",   self.f_code)
         form.addRow("Item Name *",   self.f_name)
         form.addRow("Category",      self.f_cat)
         form.addRow("Unit",          self.f_unit)
         form.addRow("Quantity",      self.f_qty)
-        form.addRow("Reorder Level", self.f_reord)
         form.addRow("Unit Cost",     self.f_cost)
         form.addRow("Unit Price",    self.f_price)
         form.addRow("Supplier",      self.f_supp)
@@ -341,6 +335,6 @@ class InventoryDialog(QDialog):
         cat_id = self.categories.get(self.f_cat.currentText())
         return (self.f_code.text().strip(), self.f_name.text().strip(),
                 cat_id, self.f_unit.text().strip(),
-                self.f_qty.value(), self.f_reord.value(),
+                self.f_qty.value(),
                 self.f_cost.value(), self.f_price.value(),
                 self.f_supp.text().strip(), self.f_loc.text().strip())

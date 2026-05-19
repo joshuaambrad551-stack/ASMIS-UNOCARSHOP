@@ -7,7 +7,7 @@ Key integrations:
 - Auto-refreshes when ANY module changes data
 - Pulls live stats from dashboard_stats view
 - Shows: customers, vehicles, orders, billing, attendance,
-         low stock alerts, recent transactions, appointments
+         out-of-stock alerts, recent transactions, appointments
 """
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -75,11 +75,11 @@ class DashboardPage(QWidget):
         self.kpi_completed   = StatCard("Completed Today",   "—", "✅", GREEN)
         self.kpi_revenue_day = StatCard("Today's Revenue",   "—", "💵", GREEN)
         self.kpi_revenue_mon = StatCard("Monthly Revenue",   "—", "💰", "#9b59b6")
-        self.kpi_low_stock   = StatCard("Low Stock Items",   "—", "⚠",  RED)
+        self.kpi_low_stock   = StatCard("Out of Stock",      "—", "⚠",  RED)
         self.kpi_appts       = StatCard("Appts Today",       "—", "📅", "#16a085")
         self.kpi_unpaid      = StatCard("Unpaid Invoices",   "—", "🧾", RED)
         self.kpi_present     = StatCard("Present Today",     "—", "🟢", GREEN)
-        self.kpi_receivables = StatCard("Total Receivables", "—", "💳", "#8e44ad")
+        self.kpi_receivables = StatCard("Total Billed", "—", "💳", "#8e44ad")
 
         cards = [
             self.kpi_customers, self.kpi_vehicles, self.kpi_employees, self.kpi_orders,
@@ -91,7 +91,7 @@ class DashboardPage(QWidget):
             kpi.addWidget(c, i // 4, i % 4)
         self.main_layout.addLayout(kpi)
 
-        # ── Row 2: Recent Orders + Low Stock + Attendance ──
+        # ── Row 2: Recent Orders + Out of Stock + Attendance ──
         row2 = QHBoxLayout(); row2.setSpacing(16)
 
         # Recent orders
@@ -131,13 +131,13 @@ class DashboardPage(QWidget):
             self.att_bars[label] = val
         al.addStretch()
 
-        # Low stock
+        # Out of stock
         low_card = Card(); low_card.setFixedWidth(260)
         ll = QVBoxLayout(low_card); ll.setContentsMargins(16,16,16,16); ll.setSpacing(10)
-        hdr3 = QLabel("⚠  Low Stock Alert")
+        hdr3 = QLabel("⚠  Out of Stock")
         hdr3.setStyleSheet(f"font-size:14px;font-weight:700;color:{TEXT_DARK};border:none;")
         ll.addWidget(hdr3)
-        self.low_table = StyledTable(["Item","Qty","Level"])
+        self.low_table = StyledTable(["Item","Qty"])
         self.low_table.setFixedHeight(220)
         self.low_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         ll.addWidget(self.low_table)
@@ -155,7 +155,7 @@ class DashboardPage(QWidget):
         hdr4 = QLabel("🧾  Recent Transactions")
         hdr4.setStyleSheet(f"font-size:14px;font-weight:700;color:{TEXT_DARK};border:none;")
         bl.addWidget(hdr4)
-        self.bill_table = StyledTable(["Bill #","Customer","Total","Paid","Status"])
+        self.bill_table = StyledTable(["Bill #","Customer","Subtotal","Manpower","Total","Status"])
         self.bill_table.setFixedHeight(200)
         self.bill_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         bl.addWidget(self.bill_table)
@@ -233,19 +233,20 @@ class DashboardPage(QWidget):
             self.kpi_orders.set_value(cur.fetchone()[0])
             cur.execute("SELECT COUNT(*) FROM service_orders WHERE status='Completed' AND date_out=CURRENT_DATE")
             self.kpi_completed.set_value(cur.fetchone()[0])
-            cur.execute("SELECT COALESCE(SUM(amount_paid),0) FROM billing WHERE bill_date=CURRENT_DATE")
+            cur.execute("SELECT COALESCE(SUM(total),0) FROM billing WHERE bill_date=CURRENT_DATE AND status!='Void'")
             self.kpi_revenue_day.set_value(f"₱{float(cur.fetchone()[0]):,.0f}")
-            cur.execute("""SELECT COALESCE(SUM(amount_paid),0) FROM billing
+            cur.execute("""SELECT COALESCE(SUM(total),0) FROM billing
                 WHERE EXTRACT(MONTH FROM bill_date)=EXTRACT(MONTH FROM CURRENT_DATE)
-                AND EXTRACT(YEAR FROM bill_date)=EXTRACT(YEAR FROM CURRENT_DATE)""")
+                AND EXTRACT(YEAR FROM bill_date)=EXTRACT(YEAR FROM CURRENT_DATE)
+                AND status!='Void'""")
             self.kpi_revenue_mon.set_value(f"₱{float(cur.fetchone()[0]):,.0f}")
-            cur.execute("SELECT COUNT(*) FROM inventory WHERE quantity<=reorder_lvl AND status='Active'")
+            cur.execute("SELECT COUNT(*) FROM inventory WHERE quantity<=0 AND status='Active'")
             self.kpi_low_stock.set_value(cur.fetchone()[0])
             cur.execute("SELECT COUNT(*) FROM billing WHERE status='Unpaid'")
             self.kpi_unpaid.set_value(cur.fetchone()[0])
             cur.execute("SELECT COUNT(*) FROM attendance WHERE attend_date=CURRENT_DATE AND status='Present'")
             self.kpi_present.set_value(cur.fetchone()[0])
-            cur.execute("SELECT COALESCE(SUM(balance),0) FROM billing WHERE status!='Void'")
+            cur.execute("SELECT COALESCE(SUM(total),0) FROM billing WHERE status!='Void'")
             self.kpi_receivables.set_value(f"₱{float(cur.fetchone()[0]):,.0f}")
             self.kpi_appts.set_value("—")
             conn.close()
@@ -296,9 +297,9 @@ class DashboardPage(QWidget):
         try:
             conn = get_connection(); cur = conn.cursor()
             cur.execute("""
-                SELECT item_name, quantity, reorder_lvl
+                SELECT item_name, quantity
                 FROM inventory
-                WHERE quantity<=reorder_lvl AND status='Active'
+                WHERE quantity<=0 AND status='Active'
                 ORDER BY quantity ASC LIMIT 8
             """)
             rows = cur.fetchall(); conn.close()
@@ -312,19 +313,18 @@ class DashboardPage(QWidget):
                 qty_item = QTableWidgetItem(str(rd[1]))
                 qty_item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
                 qty_item.setForeground(QColor(RED))
-                lvl_item = QTableWidgetItem(str(rd[2]))
-                lvl_item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
                 self.low_table.setItem(r, 0, name_item)
                 self.low_table.setItem(r, 1, qty_item)
-                self.low_table.setItem(r, 2, lvl_item)
         except Exception as e:
-            print(f"Low stock error: {e}")
+            print(f"Out-of-stock error: {e}")
 
     def _load_recent_billing(self):
         try:
             conn = get_connection(); cur = conn.cursor()
+            cur.execute("ALTER TABLE billing ADD COLUMN IF NOT EXISTS manpower NUMERIC(10,2) DEFAULT 0")
+            conn.commit()
             cur.execute("""
-                SELECT b.bill_no, c.full_name, b.total, b.amount_paid, b.status
+                SELECT b.bill_no, c.full_name, b.subtotal, COALESCE(b.manpower,0), b.total, b.status
                 FROM billing b
                 JOIN customers c ON b.cust_id=c.cust_id
                 ORDER BY b.created_at DESC LIMIT 8
@@ -336,13 +336,13 @@ class DashboardPage(QWidget):
                 self.bill_table.insertRow(r)
                 self.bill_table.setRowHeight(r, 34)
                 for c, val in enumerate(rd[:-1]):
-                    text = f"₱{float(val):,.2f}" if c in (2, 3) else str(val) if val else ""
+                    text = f"PHP {float(val):,.2f}" if c in (2, 3, 4) else str(val) if val else ""
                     item = QTableWidgetItem(text)
                     item.setTextAlignment(
-                        (Qt.AlignRight if c in (2,3) else Qt.AlignLeft) | Qt.AlignVCenter
+                        (Qt.AlignRight if c in (2, 3, 4) else Qt.AlignLeft) | Qt.AlignVCenter
                     )
                     self.bill_table.setItem(r, c, item)
-                self.bill_table.setItem(r, 4, status_item(rd[4]))
+                self.bill_table.setItem(r, 5, status_item(rd[5]))
         except Exception as e:
             print(f"Billing load error: {e}")
 

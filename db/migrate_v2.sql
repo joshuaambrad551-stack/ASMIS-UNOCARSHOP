@@ -86,8 +86,8 @@ SELECT
     e.emp_id,
     e.emp_code,
     e.full_name,
-    p.position_name,
-    p.base_salary,
+    COALESCE(e.pay_schedule,'Weekly') AS pay_schedule,
+    540.00::numeric AS daily_wage,
     pp.period_id,
     pp.period_name,
     pp.start_date,
@@ -97,20 +97,15 @@ SELECT
     COUNT(a.attend_id) FILTER (WHERE a.status = 'Late')     AS days_late,
     COUNT(a.attend_id) FILTER (WHERE a.status = 'Half Day') AS days_halfday,
     COUNT(a.attend_id) FILTER (WHERE a.status = 'On Leave') AS days_onleave,
-    -- Computed basic pay based on attendance
-    ROUND(
-        p.base_salary / 22.0 *
-        (COUNT(a.attend_id) FILTER (WHERE a.status IN ('Present','Late'))
-         + COUNT(a.attend_id) FILTER (WHERE a.status = 'Half Day') * 0.5),
-    2) AS computed_basic_pay
+    -- Fixed 15-day salary for Regular employees from PHP 16,200 monthly basic pay.
+    8100.00::numeric AS computed_basic_pay
 FROM employees e
-LEFT JOIN positions p ON e.position_id = p.position_id
 CROSS JOIN payroll_periods pp
 LEFT JOIN attendance a ON e.emp_id = a.emp_id
     AND a.attend_date BETWEEN pp.start_date AND pp.end_date
-WHERE e.status = 'Active'
+WHERE e.status = 'Active' AND COALESCE(e.classification,'Regular') = 'Regular'
 GROUP BY e.emp_id, e.emp_code, e.full_name,
-         p.position_name, p.base_salary,
+         e.pay_schedule,
          pp.period_id, pp.period_name, pp.start_date, pp.end_date;
 
 -- ── 6. Dashboard live stats view ──────────────────────────
@@ -124,19 +119,20 @@ SELECT
         AND date_out = CURRENT_DATE)                                          AS completed_today,
     (SELECT COUNT(*) FROM appointments WHERE appt_date = CURRENT_DATE
         AND status NOT IN ('Cancelled','No Show'))                            AS appointments_today,
-    (SELECT COALESCE(SUM(amount_paid),0) FROM billing
+    (SELECT COALESCE(SUM(total),0) FROM billing
         WHERE EXTRACT(MONTH FROM bill_date) = EXTRACT(MONTH FROM CURRENT_DATE)
-        AND EXTRACT(YEAR FROM bill_date) = EXTRACT(YEAR FROM CURRENT_DATE))   AS monthly_revenue,
-    (SELECT COALESCE(SUM(amount_paid),0) FROM billing
-        WHERE bill_date = CURRENT_DATE)                                       AS daily_revenue,
+        AND EXTRACT(YEAR FROM bill_date) = EXTRACT(YEAR FROM CURRENT_DATE)
+        AND status != 'Void')                                                AS monthly_revenue,
+    (SELECT COALESCE(SUM(total),0) FROM billing
+        WHERE bill_date = CURRENT_DATE AND status != 'Void')                  AS daily_revenue,
     (SELECT COUNT(*) FROM inventory
-        WHERE quantity <= reorder_lvl AND status = 'Active')                  AS low_stock_count,
+        WHERE quantity <= 0 AND status = 'Active')                            AS low_stock_count,
     (SELECT COUNT(*) FROM attendance
         WHERE attend_date = CURRENT_DATE AND status = 'Present')              AS present_today,
     (SELECT COUNT(*) FROM attendance
         WHERE attend_date = CURRENT_DATE AND status = 'Absent')               AS absent_today,
     (SELECT COUNT(*) FROM billing WHERE status = 'Unpaid')                    AS unpaid_invoices,
-    (SELECT COALESCE(SUM(balance),0) FROM billing WHERE status != 'Void')     AS total_receivables;
+    (SELECT COALESCE(SUM(total),0) FROM billing WHERE status != 'Void')       AS total_receivables;
 
 -- ── 7. Trigger: auto-decrease inventory when part used ─────
 CREATE OR REPLACE FUNCTION fn_deduct_inventory()
@@ -170,20 +166,23 @@ CREATE TRIGGER trg_restore_inventory
 AFTER DELETE ON service_order_parts
 FOR EACH ROW EXECUTE FUNCTION fn_restore_inventory();
 
--- Recalculate invoice totals from service base price, parts, discount, and tax rate.
+ALTER TABLE billing
+ADD COLUMN IF NOT EXISTS manpower NUMERIC(10,2) DEFAULT 0;
+
+UPDATE billing
+SET manpower = 0
+WHERE manpower IS NULL;
+
+-- Recalculate invoice totals from parts and manual manpower.
 CREATE OR REPLACE FUNCTION fn_recalculate_order_billing(p_order_id INT)
 RETURNS VOID AS $$
 DECLARE
     v_subtotal NUMERIC(10,2);
-    v_discount NUMERIC(10,2);
-    v_tax_rate NUMERIC(5,2);
-    v_tax NUMERIC(10,2);
     v_total NUMERIC(10,2);
 BEGIN
-    SELECT COALESCE(st.base_price, 0) + COALESCE(parts.parts_total, 0)
+    SELECT COALESCE(parts.parts_total, 0)
     INTO v_subtotal
     FROM service_orders so
-    LEFT JOIN service_types st ON so.svc_type_id = st.svc_type_id
     LEFT JOIN (
         SELECT order_id, SUM(qty_used * unit_price) AS parts_total
         FROM service_order_parts
@@ -196,29 +195,21 @@ BEGIN
         RETURN;
     END IF;
 
-    SELECT LEAST(COALESCE(discount, 0), v_subtotal), COALESCE(tax_rate, 12)
-    INTO v_discount, v_tax_rate
+    IF NOT EXISTS (
+        SELECT 1 FROM billing WHERE order_id = p_order_id AND status != 'Void'
+    ) THEN
+        RETURN;
+    END IF;
+
+    SELECT v_subtotal + COALESCE(manpower, 0)
+    INTO v_total
     FROM billing
     WHERE order_id = p_order_id AND status != 'Void'
     LIMIT 1;
 
-    IF NOT FOUND THEN
-        RETURN;
-    END IF;
-
-    v_tax := ROUND(GREATEST(v_subtotal - v_discount, 0) * (v_tax_rate / 100), 2);
-    v_total := GREATEST(v_subtotal - v_discount, 0) + v_tax;
-
     UPDATE billing
     SET subtotal = v_subtotal,
-        discount = v_discount,
-        tax_amount = v_tax,
-        total = v_total,
-        status = CASE
-            WHEN amount_paid >= v_total AND v_total > 0 THEN 'Paid'
-            WHEN amount_paid > 0 THEN 'Partial'
-            ELSE 'Unpaid'
-        END
+        total = v_total
     WHERE order_id = p_order_id AND status != 'Void';
 END;
 $$ LANGUAGE plpgsql;
@@ -262,33 +253,26 @@ CREATE OR REPLACE FUNCTION fn_auto_create_billing()
 RETURNS TRIGGER AS $$
 DECLARE
     v_subtotal   NUMERIC(10,2);
-    v_tax        NUMERIC(10,2);
     v_total      NUMERIC(10,2);
     v_bill_no    VARCHAR(30);
-    v_base_price NUMERIC(10,2);
 BEGIN
     -- Only fire when status changes TO 'Completed'
     IF NEW.status = 'Completed' AND OLD.status != 'Completed' THEN
         -- Check if billing already exists for this order
         IF NOT EXISTS (SELECT 1 FROM billing WHERE order_id = NEW.order_id) THEN
-            -- Get base price from service type
-            SELECT COALESCE(base_price, 0) INTO v_base_price
-            FROM service_types WHERE svc_type_id = NEW.svc_type_id;
             -- Add parts cost
             SELECT COALESCE(SUM(qty_used * unit_price), 0) INTO v_subtotal
             FROM service_order_parts WHERE order_id = NEW.order_id;
-            v_subtotal := v_subtotal + v_base_price;
-            v_tax      := ROUND(v_subtotal * 0.12, 2);
-            v_total    := v_subtotal + v_tax;
+            v_total    := v_subtotal;
             -- Generate bill number
             SELECT 'INV' || LPAD(CAST(COALESCE(MAX(CAST(SUBSTRING(bill_no FROM 4) AS INT)),0)+1 AS TEXT), 5, '0')
             INTO v_bill_no FROM billing;
             -- Insert billing record
             INSERT INTO billing
-                (bill_no, order_id, cust_id, subtotal, tax_rate, tax_amount, total, status, bill_date, due_date)
+                (bill_no, order_id, cust_id, subtotal, manpower, total, status, bill_date)
             VALUES
-                (v_bill_no, NEW.order_id, NEW.cust_id, v_subtotal, 12, v_tax, v_total,
-                 'Unpaid', CURRENT_DATE, CURRENT_DATE + INTERVAL '7 days');
+                (v_bill_no, NEW.order_id, NEW.cust_id, v_subtotal, 0, v_total,
+                 'Unpaid', CURRENT_DATE);
             -- Set date_out on order
             UPDATE service_orders SET date_out = CURRENT_DATE WHERE order_id = NEW.order_id;
         END IF;

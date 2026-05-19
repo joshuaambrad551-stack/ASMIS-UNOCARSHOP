@@ -12,8 +12,8 @@ Key integrations:
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QComboBox, QDialog, QFormLayout, QDialogButtonBox,
-    QDateEdit, QTimeEdit, QTextEdit, QTableWidgetItem,
-    QPushButton, QLineEdit, QFrame
+    QDateEdit, QTimeEdit, QTableWidgetItem,
+    QPushButton, QFrame
 )
 from PyQt5.QtCore import Qt, QDate, QTime
 from PyQt5.QtGui import QColor
@@ -38,7 +38,6 @@ class AttendancePage(QWidget):
         self.user = user
         self.setStyleSheet(f"background: {PAGE_BG};")
         self._inline_combos  = {}
-        self._inline_remarks = {}
         self._emp_rows       = {}
         self._build_ui()
         self.refresh()
@@ -129,7 +128,7 @@ class AttendancePage(QWidget):
 
         # Table
         cols = ["#", "Code", "Full Name", "Department", "Position",
-                "Status", "Time In", "Time Out", "Remarks", "Save"]
+                "Status", "Time In", "Time Out", "Save"]
         self.table = StyledTable(cols)
         self.table.setColumnWidth(0,  35)
         self.table.setColumnWidth(1,  85)
@@ -139,7 +138,6 @@ class AttendancePage(QWidget):
         self.table.setColumnWidth(5, 120)
         self.table.setColumnWidth(6,  75)
         self.table.setColumnWidth(7,  75)
-        self.table.setColumnWidth(8, 150)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setSortingEnabled(False)
         layout.addWidget(self.table)
@@ -147,7 +145,6 @@ class AttendancePage(QWidget):
     # ── Data loading ──────────────────────────────────────
     def refresh(self):
         self._inline_combos.clear()
-        self._inline_remarks.clear()
         self._emp_rows.clear()
         self._load_departments()
         self._load_all_employees()
@@ -174,7 +171,7 @@ class AttendancePage(QWidget):
                 SELECT e.emp_id, e.emp_code, e.full_name,
                        COALESCE(d.dept_name,'—'), COALESCE(p.position_name,'—'),
                        a.attend_id, COALESCE(a.status,'Present'),
-                       a.time_in, a.time_out, COALESCE(a.remarks,'')
+                       a.time_in, a.time_out
                 FROM employees e
                 LEFT JOIN departments d ON e.dept_id = d.dept_id
                 LEFT JOIN positions p ON e.position_id = p.position_id
@@ -188,7 +185,7 @@ class AttendancePage(QWidget):
             self.table.setRowCount(0)
             for idx, rd in enumerate(rows):
                 emp_id, emp_code, full_name, dept, position, \
-                    attend_id, att_status, time_in, time_out, remarks = rd
+                    attend_id, att_status, time_in, time_out = rd
 
                 r = self.table.rowCount()
                 self.table.insertRow(r)
@@ -221,18 +218,9 @@ class AttendancePage(QWidget):
                 ti = QTableWidgetItem(str(time_in)[:5] if time_in else "08:00")
                 ti.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
                 self.table.setItem(r, 6, ti)
-                to_ = QTableWidgetItem(str(time_out)[:5] if time_out else "17:00")
+                to_ = QTableWidgetItem(str(time_out)[:5] if time_out else "16:00")
                 to_.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
                 self.table.setItem(r, 7, to_)
-
-                # Remarks
-                rem_edit = QLineEdit(remarks)
-                rem_edit.setStyleSheet(f"""
-                    QLineEdit{{border:1px solid {BORDER};border-radius:6px;
-                    padding:3px 8px;font-size:12px;background:white;}}
-                """)
-                self.table.setCellWidget(r, 8, rem_edit)
-                self._inline_remarks[emp_id] = rem_edit
 
                 self._color_row(r, att_status)
 
@@ -249,7 +237,7 @@ class AttendancePage(QWidget):
                 act = QWidget(); act.setStyleSheet("background:transparent;")
                 al = QHBoxLayout(act); al.setContentsMargins(4,2,4,2)
                 al.addWidget(btn_s)
-                self.table.setCellWidget(r, 9, act)
+                self.table.setCellWidget(r, 8, act)
 
             self.count_lbl.setText(f"{len(rows)} employee(s)")
         except Exception as e:
@@ -265,6 +253,13 @@ class AttendancePage(QWidget):
             item = self.table.item(row, c)
             if item:
                 item.setBackground(bg)
+
+    def _status_from_times(self, selected_status, time_in, time_out):
+        if selected_status in ("Absent", "Half Day", "On Leave"):
+            return selected_status
+        if time_in and time_in > "08:00":
+            return "Late"
+        return "Present"
 
     def _mark_all(self, status):
         for emp_id, combo in self._inline_combos.items():
@@ -287,28 +282,30 @@ class AttendancePage(QWidget):
     def _save_one(self, emp_id):
         date_str = self.date_filter.date().toString("yyyy-MM-dd")
         combo    = self._inline_combos.get(emp_id)
-        rem_ed   = self._inline_remarks.get(emp_id)
         row      = self._emp_rows.get(emp_id)
         if combo is None: return
         ti_item  = self.table.item(row, 6)
         to_item  = self.table.item(row, 7)
+        time_in = ti_item.text() if ti_item else "08:00"
+        time_out = to_item.text() if to_item else "16:00"
+        status = self._status_from_times(combo.currentText(), time_in, time_out)
         try:
             conn = get_connection(); cur = conn.cursor()
             cur.execute("""
                 INSERT INTO attendance
-                (emp_id,attend_date,time_in,time_out,status,remarks,recorded_by)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                (emp_id,attend_date,time_in,time_out,status,recorded_by)
+                VALUES (%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (emp_id,attend_date) DO UPDATE SET
                     time_in=EXCLUDED.time_in, time_out=EXCLUDED.time_out,
-                    status=EXCLUDED.status, remarks=EXCLUDED.remarks
+                    status=EXCLUDED.status
             """, (emp_id, date_str,
-                  ti_item.text() if ti_item else "08:00",
-                  to_item.text() if to_item else "17:00",
-                  combo.currentText(),
-                  rem_ed.text().strip() if rem_ed else "",
+                  time_in,
+                  time_out,
+                  status,
                   self.user[0] if self.user else None))
             conn.commit(); conn.close()
-            self._color_row(row, combo.currentText())
+            combo.setCurrentText(status)
+            self._color_row(row, status)
             self._update_summary()
             bus.attendance_changed.emit()
             bus.dashboard_refresh.emit()
@@ -324,23 +321,25 @@ class AttendancePage(QWidget):
                 row    = self._emp_rows.get(emp_id)
                 if row is not None and self.table.isRowHidden(row):
                     continue
-                rem_ed  = self._inline_remarks.get(emp_id)
                 ti_item = self.table.item(row, 6)
                 to_item = self.table.item(row, 7)
+                time_in = ti_item.text() if ti_item else "08:00"
+                time_out = to_item.text() if to_item else "16:00"
+                status = self._status_from_times(combo.currentText(), time_in, time_out)
                 cur.execute("""
                     INSERT INTO attendance
-                    (emp_id,attend_date,time_in,time_out,status,remarks,recorded_by)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+                    (emp_id,attend_date,time_in,time_out,status,recorded_by)
+                    VALUES (%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (emp_id,attend_date) DO UPDATE SET
                         time_in=EXCLUDED.time_in, time_out=EXCLUDED.time_out,
-                        status=EXCLUDED.status, remarks=EXCLUDED.remarks
+                        status=EXCLUDED.status
                 """, (emp_id, date_str,
-                      ti_item.text() if ti_item else "08:00",
-                      to_item.text() if to_item else "17:00",
-                      combo.currentText(),
-                      rem_ed.text().strip() if rem_ed else "",
+                      time_in,
+                      time_out,
+                      status,
                       self.user[0] if self.user else None))
-                self._color_row(row, combo.currentText())
+                combo.setCurrentText(status)
+                self._color_row(row, status)
                 saved += 1
             conn.commit(); conn.close()
             self._update_summary()
@@ -358,11 +357,11 @@ class AttendancePage(QWidget):
                 conn = get_connection(); cur = conn.cursor()
                 cur.execute("""
                     INSERT INTO attendance
-                    (emp_id,attend_date,time_in,time_out,status,remarks,recorded_by)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+                    (emp_id,attend_date,time_in,time_out,status,recorded_by)
+                    VALUES (%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (emp_id,attend_date) DO UPDATE SET
                         time_in=EXCLUDED.time_in, time_out=EXCLUDED.time_out,
-                        status=EXCLUDED.status, remarks=EXCLUDED.remarks
+                        status=EXCLUDED.status
                 """, data + (self.user[0] if self.user else None,))
                 conn.commit(); conn.close()
                 info(self, "Saved", "Attendance record saved.")
@@ -452,19 +451,16 @@ class AttendanceDialog(QDialog):
         self.f_in.setTime(QTime.fromString(str(ex[2])[:5],"HH:mm") if ex and ex[2] else QTime(8,0))
         self.f_out = QTimeEdit()
         self.f_out.setDisplayFormat("HH:mm")
-        self.f_out.setTime(QTime.fromString(str(ex[3])[:5],"HH:mm") if ex and ex[3] else QTime(17,0))
+        self.f_out.setTime(QTime.fromString(str(ex[3])[:5],"HH:mm") if ex and ex[3] else QTime(16,0))
         self.f_status = QComboBox()
         self.f_status.addItems(["Present","Absent","Late","Half Day","On Leave"])
         if ex and ex[4]: self.f_status.setCurrentText(ex[4])
-        self.f_remarks = QTextEdit(ex[5] if ex and ex[5] else "")
-        self.f_remarks.setFixedHeight(60)
 
         form.addRow("Employee *", self.f_emp)
         form.addRow("Date *",     self.f_date)
         form.addRow("Time In",    self.f_in)
         form.addRow("Time Out",   self.f_out)
         form.addRow("Status",     self.f_status)
-        form.addRow("Remarks",    self.f_remarks)
         layout.addLayout(form)
 
         btns = QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel)
@@ -486,6 +482,5 @@ class AttendanceDialog(QDialog):
             self.f_date.date().toString("yyyy-MM-dd"),
             self.f_in.time().toString("HH:mm"),
             self.f_out.time().toString("HH:mm"),
-            self.f_status.currentText(),
-            self.f_remarks.toPlainText().strip(),
+            "Late" if self.f_status.currentText() == "Present" and self.f_in.time() > QTime(8, 0) else self.f_status.currentText(),
         )

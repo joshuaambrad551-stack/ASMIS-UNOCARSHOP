@@ -4,7 +4,7 @@ UnoCarshop ASMIS — Payroll Module (Integrated v2)
 
 Key integrations:
 - Auto-loads ALL active employees
-- Computes basic pay from attendance + base salary
+- Computes regular 15-day salary from fixed monthly basic pay
 - Connected to attendance via payroll_attendance_summary view
 - Fires payroll_changed + dashboard_refresh on save
 """
@@ -27,6 +27,19 @@ from modules.widgets import (
 )
 from db.connection import get_connection
 from db.events import bus
+
+REGULAR_MONTHLY_BASIC_PAY = 16200.00
+REGULAR_SEMI_MONTHLY_PAY = REGULAR_MONTHLY_BASIC_PAY / 2.0
+REGULAR_DAILY_WAGE = REGULAR_MONTHLY_BASIC_PAY / 30.0
+REGULAR_HOURLY_WAGE = REGULAR_DAILY_WAGE / 8.0
+OVERTIME_MULTIPLIER = 1.25
+REGULAR_SSS_DEDUCTION = 400.00
+REGULAR_PAGIBIG_DEDUCTION = 100.00
+REGULAR_PHILHEALTH_DEDUCTION = 202.00
+
+
+def employee_category(value):
+    return "Non-Regular" if value == "On-Call" else (value or "Regular")
 
 
 class PayrollPage(QWidget):
@@ -54,7 +67,7 @@ class PayrollPage(QWidget):
         self.s_total  = StatCard("Total Payroll",    "₱0", "💰", ORANGE)
         self.s_paid   = StatCard("Paid",             "0",  "✅", GREEN)
         self.s_draft  = StatCard("Draft",            "0",  "📝", BLUE)
-        self.s_emp    = StatCard("Active Employees", "0",  "👥", "#9b59b6")
+        self.s_emp    = StatCard("Regular Employees", "0",  "👥", "#9b59b6")
         for s in [self.s_total, self.s_paid, self.s_draft, self.s_emp]:
             s.setFixedHeight(88); stats.addWidget(s)
         layout.addLayout(stats)
@@ -88,9 +101,9 @@ class PayrollPage(QWidget):
         self.period_combo.setStyleSheet(self._cs())
         self.period_combo.currentIndexChanged.connect(self._filter_payroll)
 
-        btn_gen     = OrangeButton("⚡  Generate from Attendance")
+        btn_gen     = OrangeButton("⚡  Generate Regular Payroll")
         btn_gen.clicked.connect(self._generate_from_attendance)
-        btn_add     = GhostButton("➕  Add Manual")
+        btn_add     = GhostButton("➕  Manual / Non-Regular Pay")
         btn_add.clicked.connect(self._add_payroll)
         btn_period  = GhostButton("📅  New Period")
         btn_period.clicked.connect(self._add_period)
@@ -107,17 +120,23 @@ class PayrollPage(QWidget):
         toolbar.addWidget(btn_gen)
         layout.addLayout(toolbar)
 
-        cols = ["Employee","Department","Basic Pay","OT Pay",
-                "Allowances","Deductions","Net Pay","Status","Actions"]
+        hint = QLabel("Regular payroll automatically uses PHP 8,100 basic pay for each 15-day period. Non-Regular payroll shows PHP 0 basic pay and accepts a manual total salary.")
+        hint.setStyleSheet(f"color:{TEXT_SOFT};font-size:12px;background:#f6f8fb;border:1px solid {BORDER};border-radius:6px;padding:8px 10px;")
+        layout.addWidget(hint)
+
+        cols = ["Employee","Category","Schedule","Department","Basic Pay","OT Pay",
+                "Total Salary","Deductions","Net Pay","Status","Actions"]
         self.payroll_table = StyledTable(cols)
         self.payroll_table.setColumnWidth(0, 150)
-        self.payroll_table.setColumnWidth(1, 120)
-        self.payroll_table.setColumnWidth(2, 90)
-        self.payroll_table.setColumnWidth(3, 80)
+        self.payroll_table.setColumnWidth(1, 80)
+        self.payroll_table.setColumnWidth(2, 95)
+        self.payroll_table.setColumnWidth(3, 110)
         self.payroll_table.setColumnWidth(4, 90)
-        self.payroll_table.setColumnWidth(5, 90)
+        self.payroll_table.setColumnWidth(5, 80)
         self.payroll_table.setColumnWidth(6, 90)
         self.payroll_table.setColumnWidth(7, 90)
+        self.payroll_table.setColumnWidth(8, 90)
+        self.payroll_table.setColumnWidth(9, 90)
         self.payroll_table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.payroll_table)
 
@@ -145,13 +164,13 @@ class PayrollPage(QWidget):
         toolbar2.addWidget(btn_ref2)
         layout.addLayout(toolbar2)
 
-        info_lbl = QLabel("ℹ  This table shows computed pay based on actual attendance records.")
+        info_lbl = QLabel("Regular employees are computed at PHP 16,200 monthly basic pay, or PHP 8,100 per 15-day payroll period. Non-Regular employees are handled manually with PHP 0 basic pay.")
         info_lbl.setStyleSheet(f"color:{TEXT_SOFT};font-size:12px;background:#e7eef8;"
                                 "border:1px solid #8aa4c4;border-radius:6px;padding:8px 12px;")
         layout.addWidget(info_lbl)
 
-        cols = ["Employee","Position","Base Salary","Present","Absent",
-                "Late","Half Day","On Leave","Computed Pay"]
+        cols = ["Employee","Schedule","Monthly Basic","Present","Absent",
+                "Late","Half Day","On Leave","15-Day Salary"]
         self.att_table = StyledTable(cols)
         self.att_table.setColumnWidth(0, 160)
         self.att_table.setColumnWidth(1, 130)
@@ -191,7 +210,8 @@ class PayrollPage(QWidget):
         try:
             conn = get_connection(); cur = conn.cursor()
             q = """
-                SELECT py.payroll_id, e.full_name, d.dept_name,
+                SELECT py.payroll_id, e.full_name, COALESCE(e.classification,'Regular'),
+                       COALESCE(e.pay_schedule,'Weekly'), d.dept_name,
                        py.basic_pay, py.overtime_pay, py.allowances,
                        py.deductions, py.net_pay, py.status
                 FROM payroll py
@@ -217,18 +237,22 @@ class PayrollPage(QWidget):
                 r = self.payroll_table.rowCount()
                 self.payroll_table.insertRow(r)
                 self.payroll_table.setRowHeight(r, 38)
-                for c, val in enumerate(rd[1:7]):
-                    item = QTableWidgetItem(
-                        f"₱{float(val):,.2f}" if c >= 2 else str(val) if val else "—"
-                    )
+                for c, val in enumerate(rd[1:9]):
+                    if c >= 4:
+                        text = f"PHP {float(val):,.2f}"
+                    elif c == 1:
+                        text = employee_category(val)
+                    else:
+                        text = str(val) if val else "-"
+                    item = QTableWidgetItem(text)
                     item.setTextAlignment(
-                        (Qt.AlignRight if c >= 2 else Qt.AlignLeft) | Qt.AlignVCenter
+                        (Qt.AlignRight if c >= 4 else Qt.AlignLeft) | Qt.AlignVCenter
                     )
                     self.payroll_table.setItem(r, c, item)
-                net = QTableWidgetItem(f"₱{float(rd[7]):,.2f}")
+                net = QTableWidgetItem(f"PHP {float(rd[9]):,.2f}")
                 net.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                self.payroll_table.setItem(r, 6, net)
-                self.payroll_table.setItem(r, 7, status_item(rd[8]))
+                self.payroll_table.setItem(r, 8, net)
+                self.payroll_table.setItem(r, 9, status_item(rd[10]))
 
                 pid_ = rd[0]
                 act = QWidget(); act.setStyleSheet("background:transparent;")
@@ -240,7 +264,7 @@ class PayrollPage(QWidget):
                 btn_d.setStyleSheet("QPushButton{background:#ffebee;color:#c62828;border:1px solid #ef9a9a;border-radius:5px;font-size:11px;padding:0 8px;}QPushButton:hover{background:#ffcdd2;}")
                 btn_d.clicked.connect(lambda _, p=pid_: self._delete_payroll(p))
                 al.addWidget(btn_e); al.addWidget(btn_d)
-                self.payroll_table.setCellWidget(r, 8, act)
+                self.payroll_table.setCellWidget(r, 10, act)
 
             self.count_lbl.setText(f"Showing {len(rows)} payroll record(s)")
         except Exception as e:
@@ -264,35 +288,31 @@ class PayrollPage(QWidget):
                 pid = self._periods.get(period_name)
                 if pid:
                     cur.execute("""
-                        SELECT full_name, position_name, base_salary,
+                        SELECT full_name, pay_schedule, %s::numeric AS monthly_basic,
                                days_present, days_absent, days_late,
-                               days_halfday, days_onleave, computed_basic_pay
+                               days_halfday, days_onleave, %s::numeric AS computed_basic_pay
                         FROM payroll_attendance_summary
                         WHERE period_id = %s
                         ORDER BY full_name
-                    """, (pid,))
+                    """, (REGULAR_MONTHLY_BASIC_PAY, REGULAR_SEMI_MONTHLY_PAY, pid))
                 else:
                     cur.execute("SELECT 1 WHERE false")
             else:
                 # Fallback: compute from raw tables
                 cur.execute("""
-                    SELECT e.full_name, p.position_name, p.base_salary,
+                    SELECT e.full_name, COALESCE(e.pay_schedule,'Weekly'), %s::numeric AS monthly_basic,
                         COUNT(a.attend_id) FILTER (WHERE a.status='Present') AS present,
                         COUNT(a.attend_id) FILTER (WHERE a.status='Absent')  AS absent,
                         COUNT(a.attend_id) FILTER (WHERE a.status='Late')    AS late,
                         COUNT(a.attend_id) FILTER (WHERE a.status='Half Day') AS halfday,
                         COUNT(a.attend_id) FILTER (WHERE a.status='On Leave') AS onleave,
-                        ROUND(p.base_salary/22.0 * (
-                            COUNT(a.attend_id) FILTER (WHERE a.status IN ('Present','Late'))
-                            + COUNT(a.attend_id) FILTER (WHERE a.status='Half Day')*0.5
-                        ), 2) AS computed
+                        %s::numeric AS computed
                     FROM employees e
-                    LEFT JOIN positions p ON e.position_id=p.position_id
                     LEFT JOIN attendance a ON e.emp_id=a.emp_id
-                    WHERE e.status='Active'
-                    GROUP BY e.emp_id, e.full_name, p.position_name, p.base_salary
+                    WHERE e.status='Active' AND COALESCE(e.classification,'Regular')='Regular'
+                    GROUP BY e.emp_id, e.full_name, e.pay_schedule
                     ORDER BY e.full_name
-                """)
+                """, (REGULAR_MONTHLY_BASIC_PAY, REGULAR_SEMI_MONTHLY_PAY))
 
             rows = cur.fetchall(); conn.close()
             self.att_table.setRowCount(0)
@@ -320,7 +340,7 @@ class PayrollPage(QWidget):
             paid = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM payroll WHERE status='Draft'")
             draft = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM employees WHERE status='Active'")
+            cur.execute("SELECT COUNT(*) FROM employees WHERE status='Active' AND COALESCE(classification,'Regular')='Regular'")
             emp = cur.fetchone()[0]
             conn.close()
             self.s_total.set_value(f"₱{float(total):,.0f}")
@@ -348,28 +368,33 @@ class PayrollPage(QWidget):
             # Get period dates
             cur.execute("SELECT start_date, end_date FROM payroll_periods WHERE period_id=%s", (pid,))
             start_date, end_date = cur.fetchone()
-            # Get all active employees with attendance in this period
+            # Generate only Regular employees; Non-Regular payroll is manual.
             cur.execute("""
-                SELECT e.emp_id, e.full_name, p.base_salary,
+                SELECT e.emp_id, e.full_name, COALESCE(e.pay_schedule,'Weekly'),
                     COUNT(a.attend_id) FILTER (WHERE a.status IN ('Present','Late')) AS worked,
-                    COUNT(a.attend_id) FILTER (WHERE a.status = 'Half Day') AS halfdays
+                    COUNT(a.attend_id) FILTER (WHERE a.status = 'Half Day') AS halfdays,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN a.time_out > TIME '16:00'
+                            THEN EXTRACT(EPOCH FROM (a.time_out - TIME '16:00')) / 3600.0
+                            ELSE 0
+                        END
+                    ), 0) AS overtime_hours
                 FROM employees e
-                LEFT JOIN positions p ON e.position_id=p.position_id
                 LEFT JOIN attendance a ON e.emp_id=a.emp_id
                     AND a.attend_date BETWEEN %s AND %s
-                WHERE e.status='Active'
-                GROUP BY e.emp_id, e.full_name, p.base_salary
+                WHERE e.status='Active' AND COALESCE(e.classification,'Regular')='Regular'
+                GROUP BY e.emp_id, e.full_name, e.pay_schedule
             """, (start_date, end_date))
             emp_rows = cur.fetchall()
             generated = 0
-            for emp_id, full_name, base_salary, worked_days, halfdays in emp_rows:
-                base_salary = base_salary or 0
-                daily_rate  = base_salary / 22.0
-                basic_pay   = round(daily_rate * (worked_days + halfdays * 0.5), 2)
-                # SSS, PhilHealth, Pag-IBIG (standard PH deductions)
-                sss        = round(min(basic_pay * 0.045, 1800), 2)
-                philhealth = round(basic_pay * 0.02, 2)
-                pagibig    = round(min(basic_pay * 0.02, 200), 2)
+            for emp_id, full_name, pay_schedule, worked_days, halfdays, overtime_hours in emp_rows:
+                hourly_rate = REGULAR_HOURLY_WAGE
+                basic_pay   = round(REGULAR_SEMI_MONTHLY_PAY, 2)
+                overtime_pay = round(float(overtime_hours or 0) * hourly_rate * OVERTIME_MULTIPLIER, 2)
+                sss        = REGULAR_SSS_DEDUCTION
+                philhealth = REGULAR_PHILHEALTH_DEDUCTION
+                pagibig    = REGULAR_PAGIBIG_DEDUCTION
                 # Check if payroll already exists for this emp+period
                 cur.execute(
                     "SELECT payroll_id FROM payroll WHERE emp_id=%s AND period_id=%s",
@@ -378,18 +403,18 @@ class PayrollPage(QWidget):
                 existing = cur.fetchone()
                 if existing:
                     cur.execute("""
-                        UPDATE payroll SET basic_pay=%s, sss=%s, philhealth=%s, pagibig=%s
+                        UPDATE payroll SET basic_pay=%s, overtime_pay=%s, sss=%s, philhealth=%s, pagibig=%s
                         WHERE payroll_id=%s
-                    """, (basic_pay, sss, philhealth, pagibig, existing[0]))
+                    """, (basic_pay, overtime_pay, sss, philhealth, pagibig, existing[0]))
                 else:
                     cur.execute("""
                         INSERT INTO payroll
-                        (period_id, emp_id, basic_pay, sss, philhealth, pagibig, status)
-                        VALUES (%s,%s,%s,%s,%s,%s,'Draft')
-                    """, (pid, emp_id, basic_pay, sss, philhealth, pagibig))
+                        (period_id, emp_id, basic_pay, overtime_pay, sss, philhealth, pagibig, status)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,'Draft')
+                    """, (pid, emp_id, basic_pay, overtime_pay, sss, philhealth, pagibig))
                 generated += 1
             conn.commit(); conn.close()
-            info(self, "Generated", f"Payroll generated for {generated} employee(s) based on attendance.")
+            info(self, "Generated", f"Regular payroll generated for {generated} employee(s). Non-Regular payroll remains manual.")
             self.refresh()
             bus.payroll_changed.emit()
             bus.dashboard_refresh.emit()
@@ -422,8 +447,8 @@ class PayrollPage(QWidget):
                 cur.execute("""
                     INSERT INTO payroll
                     (period_id,emp_id,basic_pay,overtime_pay,allowances,
-                     deductions,sss,philhealth,pagibig,tax,status)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     deductions,sss,philhealth,pagibig,status)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, data)
                 conn.commit(); conn.close()
                 info(self, "Saved", "Payroll record saved.")
@@ -438,7 +463,7 @@ class PayrollPage(QWidget):
             conn = get_connection(); cur = conn.cursor()
             cur.execute("""
                 SELECT period_id,emp_id,basic_pay,overtime_pay,allowances,
-                       deductions,sss,philhealth,pagibig,tax,status
+                       deductions,sss,philhealth,pagibig,status
                 FROM payroll WHERE payroll_id=%s
             """, (payroll_id,))
             row = cur.fetchone(); conn.close()
@@ -452,7 +477,7 @@ class PayrollPage(QWidget):
                 cur.execute("""
                     UPDATE payroll SET period_id=%s,emp_id=%s,basic_pay=%s,
                         overtime_pay=%s,allowances=%s,deductions=%s,
-                        sss=%s,philhealth=%s,pagibig=%s,tax=%s,status=%s
+                        sss=%s,philhealth=%s,pagibig=%s,status=%s
                     WHERE payroll_id=%s
                 """, data+(payroll_id,))
                 conn.commit(); conn.close()
@@ -502,7 +527,6 @@ class PeriodDialog(QDialog):
         btns = QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel)
         btns.accepted.connect(self.accept); btns.rejected.connect(self.reject)
         layout.addWidget(btns)
-
     def get_data(self):
         return (self.f_name.text().strip(),
                 self.f_start.date().toString("yyyy-MM-dd"),
@@ -521,10 +545,17 @@ class PayrollDialog(QDialog):
             padding:6px 10px;font-size:13px;background:white;}
         """)
         self._employees = {}
+        self._employee_classes_by_id = {}
         try:
             conn = get_connection(); cur = conn.cursor()
             cur.execute("SELECT emp_id, emp_code||' — '||full_name FROM employees WHERE status='Active' ORDER BY emp_code")
             self._employees = {r[1]: r[0] for r in cur.fetchall()}; conn.close()
+        except: pass
+        try:
+            conn = get_connection(); cur = conn.cursor()
+            cur.execute("SELECT emp_id, COALESCE(classification,'Regular') FROM employees WHERE status='Active'")
+            self._employee_classes_by_id = {r[0]: r[1] for r in cur.fetchall()}
+            conn.close()
         except: pass
         self._build(existing)
 
@@ -541,6 +572,8 @@ class PayrollDialog(QDialog):
         if ex and ex[1]:
             for label, eid in self._employees.items():
                 if eid == ex[1]: self.f_emp.setCurrentText(label)
+        self.f_category = QLabel("Regular")
+        self.f_category.setStyleSheet("font-weight:700;color:#0b1f3a;")
 
         def spin(v=0):
             s = QDoubleSpinBox(); s.setMaximum(999999); s.setDecimals(2); s.setPrefix("₱ ")
@@ -548,38 +581,64 @@ class PayrollDialog(QDialog):
 
         self.f_basic  = spin(ex[2] if ex else 0)
         self.f_ot     = spin(ex[3] if ex else 0)
-        self.f_allow  = spin(ex[4] if ex else 0)
+        self.f_total_salary = spin(ex[4] if ex else 0)
         self.f_deduct = spin(ex[5] if ex else 0)
         self.f_sss    = spin(ex[6] if ex else 0)
         self.f_phil   = spin(ex[7] if ex else 0)
         self.f_pagibig= spin(ex[8] if ex else 0)
-        self.f_tax    = spin(ex[9] if ex else 0)
         self.f_status = QComboBox(); self.f_status.addItems(["Draft","Approved","Paid"])
-        if ex and ex[10]: self.f_status.setCurrentText(ex[10])
+        if ex and ex[9]: self.f_status.setCurrentText(ex[9])
 
         form.addRow("Period",          self.f_period)
         form.addRow("Employee",        self.f_emp)
+        form.addRow("Category",        self.f_category)
         form.addRow("Basic Pay",       self.f_basic)
         form.addRow("Overtime Pay",    self.f_ot)
-        form.addRow("Allowances",      self.f_allow)
+        form.addRow("Total Salary",    self.f_total_salary)
         form.addRow("Other Deductions",self.f_deduct)
         form.addRow("SSS",             self.f_sss)
         form.addRow("PhilHealth",      self.f_phil)
         form.addRow("Pag-IBIG",        self.f_pagibig)
-        form.addRow("Tax",             self.f_tax)
         form.addRow("Status",          self.f_status)
         layout.addLayout(form)
         btns = QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel)
         btns.accepted.connect(self.accept); btns.rejected.connect(self.reject)
         layout.addWidget(btns)
+        self.f_emp.currentTextChanged.connect(self._apply_employee_classification)
+        self._apply_employee_classification()
+
+    def _apply_employee_classification(self):
+        emp_id = self._employees.get(self.f_emp.currentText())
+        category = employee_category(self._employee_classes_by_id.get(emp_id, "Regular"))
+        is_regular = category == "Regular"
+        self.f_category.setText(category)
+        if is_regular:
+            self.f_basic.setValue(REGULAR_SEMI_MONTHLY_PAY)
+            self.f_basic.setEnabled(False)
+            self.f_ot.setEnabled(True)
+            self.f_total_salary.setValue(0)
+            self.f_total_salary.setEnabled(False)
+            self.f_sss.setValue(REGULAR_SSS_DEDUCTION)
+            self.f_phil.setValue(REGULAR_PHILHEALTH_DEDUCTION)
+            self.f_pagibig.setValue(REGULAR_PAGIBIG_DEDUCTION)
+        else:
+            self.f_basic.setValue(0)
+            self.f_basic.setEnabled(False)
+            self.f_ot.setValue(0)
+            self.f_ot.setEnabled(False)
+            self.f_total_salary.setEnabled(True)
+        for field in (self.f_sss, self.f_phil, self.f_pagibig):
+            field.setEnabled(is_regular)
+            if not is_regular:
+                field.setValue(0)
 
     def get_data(self):
         return (
             self.periods.get(self.f_period.currentText()),
             self._employees.get(self.f_emp.currentText()),
             self.f_basic.value(), self.f_ot.value(),
-            self.f_allow.value(), self.f_deduct.value(),
+            self.f_total_salary.value(), self.f_deduct.value(),
             self.f_sss.value(), self.f_phil.value(),
-            self.f_pagibig.value(), self.f_tax.value(),
+            self.f_pagibig.value(),
             self.f_status.currentText()
         )

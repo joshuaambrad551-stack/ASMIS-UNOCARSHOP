@@ -23,6 +23,10 @@ from db.connection import get_connection
 from db.events import bus
 
 
+def employee_category(value):
+    return "Non-Regular" if value == "On-Call" else (value or "Regular")
+
+
 class EmployeesPage(QWidget):
     def __init__(self, user=None):
         super().__init__()
@@ -65,16 +69,18 @@ class EmployeesPage(QWidget):
         toolbar.addWidget(btn_add)
         layout.addLayout(toolbar)
 
-        cols = ["Code","Full Name","Department","Position","Hire Date","Gender","Phone","Status","Actions"]
+        cols = ["Code","Full Name","Category","Schedule","Department","Position","Hire Date","Gender","Phone","Status","Actions"]
         self.table = StyledTable(cols)
         self.table.setColumnWidth(0, 80)
         self.table.setColumnWidth(1, 160)
-        self.table.setColumnWidth(2, 130)
-        self.table.setColumnWidth(3, 130)
-        self.table.setColumnWidth(4, 100)
-        self.table.setColumnWidth(5, 70)
-        self.table.setColumnWidth(6, 110)
-        self.table.setColumnWidth(7, 90)
+        self.table.setColumnWidth(2, 90)
+        self.table.setColumnWidth(3, 105)
+        self.table.setColumnWidth(4, 130)
+        self.table.setColumnWidth(5, 130)
+        self.table.setColumnWidth(6, 100)
+        self.table.setColumnWidth(7, 70)
+        self.table.setColumnWidth(8, 110)
+        self.table.setColumnWidth(9, 90)
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
 
@@ -107,6 +113,8 @@ class EmployeesPage(QWidget):
             conn = get_connection(); cur = conn.cursor()
             q = """
                 SELECT e.emp_id, e.emp_code, e.full_name,
+                       COALESCE(e.classification,'Regular'),
+                       COALESCE(e.pay_schedule,'Weekly'),
                        COALESCE(d.dept_name,'—'), COALESCE(p.position_name,'—'),
                        e.hire_date, COALESCE(e.gender,'—'), COALESCE(e.phone,'—'), e.status
                 FROM employees e
@@ -129,12 +137,13 @@ class EmployeesPage(QWidget):
             for rd in rows:
                 r = self.table.rowCount(); self.table.insertRow(r)
                 self.table.setRowHeight(r, 38)
-                for c, val in enumerate(rd[1:8]):
+                for c, val in enumerate(rd[1:10]):
                     from PyQt5.QtWidgets import QTableWidgetItem
-                    item = QTableWidgetItem(str(val) if val else "")
+                    text = employee_category(val) if c == 2 else str(val) if val else ""
+                    item = QTableWidgetItem(text)
                     item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
                     self.table.setItem(r, c, item)
-                self.table.setItem(r, 7, status_item(rd[8]))
+                self.table.setItem(r, 9, status_item(rd[10]))
 
                 emp_id = rd[0]
                 act = QWidget(); act.setStyleSheet("background:transparent;")
@@ -146,7 +155,7 @@ class EmployeesPage(QWidget):
                 btn_d.setStyleSheet("QPushButton{background:#ffebee;color:#c62828;border:1px solid #ef9a9a;border-radius:5px;font-size:11px;padding:0 8px;}QPushButton:hover{background:#ffcdd2;}")
                 btn_d.clicked.connect(lambda _, eid=emp_id: self._delete_employee(eid))
                 al.addWidget(btn_e); al.addWidget(btn_d)
-                self.table.setCellWidget(r, 8, act)
+                self.table.setCellWidget(r, 10, act)
 
             self.count_lbl.setText(f"Showing {len(rows)} employee(s)")
         except Exception as e:
@@ -167,8 +176,8 @@ class EmployeesPage(QWidget):
                 conn = get_connection(); cur = conn.cursor()
                 cur.execute("""INSERT INTO employees
                     (emp_code,first_name,last_name,dept_id,position_id,hire_date,
-                     birth_date,gender,phone,email,address,status)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", data)
+                     birth_date,gender,phone,email,address,classification,pay_schedule,status)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", data)
                 conn.commit(); conn.close()
                 info(self, "Success", "Employee added.")
                 self.refresh()
@@ -180,7 +189,7 @@ class EmployeesPage(QWidget):
         try:
             conn = get_connection(); cur = conn.cursor()
             cur.execute("""SELECT emp_code,first_name,last_name,dept_id,position_id,
-                                  hire_date,birth_date,gender,phone,email,address,status
+                                  hire_date,birth_date,gender,phone,email,address,classification,pay_schedule,status
                            FROM employees WHERE emp_id=%s""", (emp_id,))
             row = cur.fetchone(); conn.close()
         except Exception as e: error(self, "Load Error", str(e)); return
@@ -191,7 +200,7 @@ class EmployeesPage(QWidget):
                 conn = get_connection(); cur = conn.cursor()
                 cur.execute("""UPDATE employees SET emp_code=%s,first_name=%s,last_name=%s,
                     dept_id=%s,position_id=%s,hire_date=%s,birth_date=%s,gender=%s,
-                    phone=%s,email=%s,address=%s,status=%s WHERE emp_id=%s""", data+(emp_id,))
+                    phone=%s,email=%s,address=%s,classification=%s,pay_schedule=%s,status=%s WHERE emp_id=%s""", data+(emp_id,))
                 conn.commit(); conn.close()
                 info(self, "Updated", "Employee record updated.")
                 self.refresh()
@@ -260,8 +269,12 @@ class EmployeeDialog(QDialog):
         self.f_phone = QLineEdit(ex[8] if ex and ex[8] else "")
         self.f_email = QLineEdit(ex[9] if ex and ex[9] else "")
         self.f_addr  = QTextEdit(ex[10] if ex and ex[10] else ""); self.f_addr.setFixedHeight(60)
+        self.f_class = QComboBox(); self.f_class.addItems(["Regular","Non-Regular"])
+        if ex and ex[11]: self.f_class.setCurrentText(employee_category(ex[11]))
+        self.f_schedule = QComboBox(); self.f_schedule.addItems(["Weekly","Semi-Monthly"])
+        if ex and ex[12]: self.f_schedule.setCurrentText(ex[12])
         self.f_status= QComboBox(); self.f_status.addItems(["Active","On Leave","Resigned","Terminated"])
-        if ex and ex[11]: self.f_status.setCurrentText(ex[11])
+        if ex and ex[13]: self.f_status.setCurrentText(ex[13])
 
         form.addRow("Employee Code *", self.f_code)
         form.addRow("First Name *",    self.f_first)
@@ -274,6 +287,8 @@ class EmployeeDialog(QDialog):
         form.addRow("Phone",           self.f_phone)
         form.addRow("Email",           self.f_email)
         form.addRow("Address",         self.f_addr)
+        form.addRow("Category",        self.f_class)
+        form.addRow("Pay Schedule",    self.f_schedule)
         form.addRow("Status",          self.f_status)
         layout.addLayout(form)
 
@@ -297,5 +312,7 @@ class EmployeeDialog(QDialog):
             self.f_hire.date().toString("yyyy-MM-dd"), self.f_bday.date().toString("yyyy-MM-dd"),
             self.f_gender.currentText(), self.f_phone.text().strip(),
             self.f_email.text().strip(), self.f_addr.toPlainText().strip(),
+            self.f_class.currentText(),
+            self.f_schedule.currentText(),
             self.f_status.currentText()
         )

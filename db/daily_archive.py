@@ -78,9 +78,9 @@ def build_daily_snapshot(snapshot_date):
             "total_vehicles": _scalar(cur, "SELECT COUNT(*) FROM vehicles"),
             "active_employees": _scalar(cur, "SELECT COUNT(*) FROM employees WHERE status='Active'"),
             "inventory_items": _scalar(cur, "SELECT COUNT(*) FROM inventory WHERE status='Active'"),
-            "low_stock_items": _scalar(
+            "out_of_stock_items": _scalar(
                 cur,
-                "SELECT COUNT(*) FROM inventory WHERE quantity <= reorder_lvl AND status='Active'",
+                "SELECT COUNT(*) FROM inventory WHERE quantity <= 0 AND status='Active'",
             ),
             "new_customers": _scalar(cur, "SELECT COUNT(*) FROM customers WHERE created_at::date=%s", params),
             "new_vehicles": _scalar(cur, "SELECT COUNT(*) FROM vehicles WHERE created_at::date=%s", params),
@@ -88,16 +88,16 @@ def build_daily_snapshot(snapshot_date):
             "completed_service_orders": _scalar(cur, "SELECT COUNT(*) FROM service_orders WHERE status='Completed' AND date_out=%s", params),
             "appointments": _scalar(cur, "SELECT COUNT(*) FROM appointments WHERE appt_date=%s", params) if has_appointments else 0,
             "invoices": _scalar(cur, "SELECT COUNT(*) FROM billing WHERE bill_date=%s", params),
-            "revenue": _scalar(cur, "SELECT COALESCE(SUM(amount_paid),0) FROM billing WHERE bill_date=%s AND status!='Void'", params),
+            "revenue": _scalar(cur, "SELECT COALESCE(SUM(total),0) FROM billing WHERE bill_date=%s AND status!='Void'", params),
             "billed_total": _scalar(cur, "SELECT COALESCE(SUM(total),0) FROM billing WHERE bill_date=%s AND status!='Void'", params),
-            "outstanding_balance": _scalar(cur, "SELECT COALESCE(SUM(balance),0) FROM billing WHERE bill_date=%s AND status!='Void'", params),
+            "outstanding_balance": 0,
         }
 
         attendance = _fetch_dicts(cur, """
             SELECT a.attend_date, e.emp_code, e.full_name,
                    COALESCE(d.dept_name,'') AS department,
                    COALESCE(p.position_name,'') AS position,
-                   a.status, a.time_in::text, a.time_out::text, a.remarks
+                   a.status, a.time_in::text, a.time_out::text
             FROM attendance a
             JOIN employees e ON a.emp_id=e.emp_id
             LEFT JOIN departments d ON e.dept_id=d.dept_id
@@ -130,8 +130,8 @@ def build_daily_snapshot(snapshot_date):
             """, (snapshot_date, snapshot_date, snapshot_date)),
             "billing": _fetch_dicts(cur, """
                 SELECT b.bill_no, c.full_name AS customer, COALESCE(so.order_no,'') AS order_no,
-                       b.subtotal, b.discount, b.tax_amount, b.total, b.amount_paid,
-                       b.balance, b.status, b.payment_method, b.bill_date, b.due_date,
+                       b.subtotal, COALESCE(b.manpower,0) AS manpower, b.total,
+                       b.status, b.payment_method, b.bill_date,
                        b.created_at
                 FROM billing b
                 LEFT JOIN customers c ON b.cust_id=c.cust_id
@@ -169,7 +169,7 @@ def build_daily_snapshot(snapshot_date):
             """, params),
             "inventory": _fetch_dicts(cur, """
                 SELECT i.item_code, i.item_name, COALESCE(ic.cat_name,'') AS category,
-                       i.quantity, i.reorder_lvl, i.unit_cost, i.unit_price,
+                       i.quantity, i.unit_cost, i.unit_price,
                        i.supplier, i.location, i.status
                 FROM inventory i
                 LEFT JOIN inventory_categories ic ON i.cat_id=ic.cat_id
@@ -179,7 +179,7 @@ def build_daily_snapshot(snapshot_date):
                 SELECT pp.period_name, pp.start_date, pp.end_date,
                        e.emp_code, e.full_name, p.basic_pay, p.overtime_pay,
                        p.allowances, p.deductions, p.sss, p.philhealth,
-                       p.pagibig, p.tax, p.net_pay, p.status, p.created_at
+                       p.pagibig, p.net_pay, p.status, p.created_at
                 FROM payroll p
                 LEFT JOIN payroll_periods pp ON p.period_id=pp.period_id
                 JOIN employees e ON p.emp_id=e.emp_id
