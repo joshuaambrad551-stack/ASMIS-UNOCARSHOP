@@ -109,6 +109,7 @@ class ServiceOrdersPage(QWidget):
         self.table.setColumnWidth(5, 80)
         self.table.setColumnWidth(6, 90)
         self.table.setColumnWidth(7, 100)
+        self.table.setColumnWidth(8, 210)
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
 

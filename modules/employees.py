@@ -81,6 +81,7 @@ class EmployeesPage(QWidget):
         self.table.setColumnWidth(7, 70)
         self.table.setColumnWidth(8, 110)
         self.table.setColumnWidth(9, 90)
+        self.table.setColumnWidth(10, 170)
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
 

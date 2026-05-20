@@ -94,6 +94,7 @@ class InventoryPage(QWidget):
         self.table.setColumnWidth(5,  90)
         self.table.setColumnWidth(6,  90)
         self.table.setColumnWidth(7, 120)
+        self.table.setColumnWidth(8, 150)
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
 

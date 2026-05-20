@@ -180,6 +180,9 @@ class StyledTable(QTableWidget):
         self.setFocusPolicy(Qt.NoFocus)
         self.setSortingEnabled(True)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.horizontalHeader().setMinimumSectionSize(60)
+        self.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.setStyleSheet(f"""
             QTableWidget {{
                 background: white; border: none;
@@ -211,6 +214,15 @@ class StyledTable(QTableWidget):
             }}
         """)
         self.setRowHeight(0, 42)
+        self._configure_action_columns(columns)
+
+    def _configure_action_columns(self, columns):
+        for idx, name in enumerate(columns):
+            label = (name or "").strip().lower()
+            if label == "actions":
+                self.setColumnWidth(idx, max(self.columnWidth(idx), 190))
+            elif label == "save":
+                self.setColumnWidth(idx, max(self.columnWidth(idx), 95))
 
     def populate(self, rows: list, col_align: dict = None):
         """Fill table from list of tuples/lists."""

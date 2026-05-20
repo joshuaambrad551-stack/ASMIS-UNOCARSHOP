@@ -137,6 +137,7 @@ class PayrollPage(QWidget):
         self.payroll_table.setColumnWidth(7, 90)
         self.payroll_table.setColumnWidth(8, 90)
         self.payroll_table.setColumnWidth(9, 90)
+        self.payroll_table.setColumnWidth(10, 150)
         self.payroll_table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.payroll_table)
 

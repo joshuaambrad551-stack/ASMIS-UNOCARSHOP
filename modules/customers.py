@@ -90,6 +90,7 @@ class CustomersPage(QWidget):
         self.cust_table.setColumnWidth(3, 160)
         self.cust_table.setColumnWidth(4, 160)
         self.cust_table.setColumnWidth(5, 75)
+        self.cust_table.setColumnWidth(6, 220)
         self.cust_table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.cust_table)
         self.cust_count = QLabel(""); self.cust_count.setStyleSheet(f"color:{TEXT_SOFT};font-size:12px;")
@@ -116,6 +117,7 @@ class CustomersPage(QWidget):
         self.veh_table.setColumnWidth(3, 100)
         self.veh_table.setColumnWidth(4, 55)
         self.veh_table.setColumnWidth(5, 80)
+        self.veh_table.setColumnWidth(6, 150)
         self.veh_table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.veh_table)
         self.veh_count = QLabel(""); self.veh_count.setStyleSheet(f"color:{TEXT_SOFT};font-size:12px;")
@@ -688,7 +690,8 @@ class CustomerVehiclesDialog(QDialog):
         self.page = parent
         self.cust_id = cust_id
         self.setWindowTitle("Customer Vehicles")
-        self.setFixedSize(780, 460)
+        self.resize(900, 560)
+        self.setMinimumSize(820, 500)
         self.setStyleSheet("QDialog{background:#f3f6fb;font-family:'Segoe UI';}")
 
         layout = QVBoxLayout(self); layout.setContentsMargins(18,16,18,16); layout.setSpacing(12)
@@ -713,6 +716,7 @@ class CustomerVehiclesDialog(QDialog):
         self.table.setColumnWidth(2, 110)
         self.table.setColumnWidth(3, 60)
         self.table.setColumnWidth(4, 90)
+        self.table.setColumnWidth(5, 150)
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
         self._load()

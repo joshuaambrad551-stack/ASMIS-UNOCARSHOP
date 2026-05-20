@@ -31,7 +31,7 @@ def main():
     app.setFont(font)
     app.setStyleSheet("""
         QLabel { font-size: 14px; }
-        QPushButton { font-size: 14px; min-height: 40px; }
+        QPushButton { font-size: 14px; }
         QLineEdit, QComboBox, QDateEdit, QTimeEdit, QTextEdit, QSpinBox, QDoubleSpinBox {
             font-size: 14px;
             min-height: 38px;

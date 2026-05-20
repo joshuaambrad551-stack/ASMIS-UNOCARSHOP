@@ -138,6 +138,7 @@ class AttendancePage(QWidget):
         self.table.setColumnWidth(5, 120)
         self.table.setColumnWidth(6,  75)
         self.table.setColumnWidth(7,  75)
+        self.table.setColumnWidth(8,  100)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setSortingEnabled(False)
         layout.addWidget(self.table)

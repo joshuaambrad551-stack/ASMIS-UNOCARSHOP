@@ -107,6 +107,7 @@ class BillingPage(QWidget):
         self.table = StyledTable(cols)
         for i, w in enumerate([90, 140, 90, 95, 95, 95, 85]):
             self.table.setColumnWidth(i, w)
+        self.table.setColumnWidth(7, 230)
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
 
