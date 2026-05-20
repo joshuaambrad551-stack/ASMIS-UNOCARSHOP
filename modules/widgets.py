@@ -181,6 +181,7 @@ class StyledTable(QTableWidget):
         self.setSortingEnabled(True)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.horizontalHeader().setMinimumSectionSize(60)
+        self.verticalHeader().setDefaultSectionSize(44)
         self.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.setStyleSheet(f"""
@@ -213,7 +214,7 @@ class StyledTable(QTableWidget):
                 background: #ccc; border-radius: 3px;
             }}
         """)
-        self.setRowHeight(0, 42)
+        self.setRowHeight(0, 44)
         self._configure_action_columns(columns)
 
     def _configure_action_columns(self, columns):
@@ -231,7 +232,7 @@ class StyledTable(QTableWidget):
         for row_data in rows:
             r = self.rowCount()
             self.insertRow(r)
-            self.setRowHeight(r, 38)
+            self.setRowHeight(r, 44)
             for c, val in enumerate(row_data):
                 item = QTableWidgetItem(str(val) if val is not None else "")
                 if col_align and c in col_align:

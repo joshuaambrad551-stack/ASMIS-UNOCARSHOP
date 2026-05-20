@@ -1,4 +1,4 @@
-﻿"""
+"""
 modules/employees.py
 UnoCarshop ASMIS - Employees (Integrated v2)
 Fires employees_changed + dashboard_refresh on all CRUD
@@ -58,7 +58,7 @@ class EmployeesPage(QWidget):
         self.filter_status.setStyleSheet(self._combo_style())
         self.filter_status.currentIndexChanged.connect(self._filter)
 
-        btn_add     = OrangeButton("?  Add Employee"); btn_add.clicked.connect(self._add_employee)
+        btn_add     = OrangeButton("\U0001F464  Add Employee"); btn_add.clicked.connect(self._add_employee)
         btn_refresh = GhostButton("Refresh");      btn_refresh.clicked.connect(self.refresh)
 
         toolbar.addWidget(self.search)
@@ -137,7 +137,7 @@ class EmployeesPage(QWidget):
             self.table.setRowCount(0)
             for rd in rows:
                 r = self.table.rowCount(); self.table.insertRow(r)
-                self.table.setRowHeight(r, 38)
+                self.table.setRowHeight(r, 44)
                 for c, val in enumerate(rd[1:10]):
                     from PyQt5.QtWidgets import QTableWidgetItem
                     text = employee_category(val) if c == 2 else str(val) if val else ""
@@ -172,13 +172,60 @@ class EmployeesPage(QWidget):
     def _add_employee(self):
         dlg = EmployeeDialog(self, self._depts, self._positions)
         if dlg.exec_() == QDialog.Accepted:
+            selected_pos = dlg.f_pos.currentText() if hasattr(dlg, "f_pos") else "Cashier"
             data = dlg.get_data()
             try:
                 conn = get_connection(); cur = conn.cursor()
+                if data[3] is None:
+                    dept_by_position = {
+                        "Cashier": "Front Desk",
+                        "Front Desk": "Front Desk",
+                        "Manager": "Management",
+                        "Utility": "Utility",
+                    }
+                    dept_name = dept_by_position.get(selected_pos, "Front Desk")
+                    cur.execute(
+                        "INSERT INTO departments (dept_name) VALUES (%s) "
+                        "ON CONFLICT (dept_name) DO NOTHING"
+                        , (dept_name,)
+                    )
+                    cur.execute("SELECT dept_id FROM departments WHERE dept_name=%s", (dept_name,))
+                    front_desk_dept = cur.fetchone()
+                    data = list(data)
+                    data[3] = front_desk_dept[0] if front_desk_dept else None
+                    data = tuple(data)
+
+                if data[4] is None:
+                    cur.execute(
+                        """
+                        INSERT INTO positions (position_name, base_salary) VALUES
+                            ('Cashier', 18000),
+                            ('Front Desk', 18000),
+                            ('Manager', 30000),
+                            ('Utility', 18000)
+                        ON CONFLICT (position_name) DO NOTHING
+                        """
+                    )
+                    # Fallback to selected add-position if unresolved
+                    cur.execute("SELECT position_id FROM positions WHERE position_name=%s", (selected_pos,))
+                    fallback_pos = cur.fetchone()
+                    data = list(data)
+                    data[4] = fallback_pos[0] if fallback_pos else None
+                    data = tuple(data)
+
                 cur.execute("""INSERT INTO employees
                     (emp_code,first_name,last_name,dept_id,position_id,hire_date,
                      birth_date,gender,phone,email,address,classification,pay_schedule,status)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", data)
+                    VALUES (
+                        ('TMP-' || SUBSTRING(MD5(RANDOM()::TEXT || CLOCK_TIMESTAMP()::TEXT), 1, 10)),
+                        %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s
+                    )
+                    RETURNING emp_id""", data)
+                emp_id = cur.fetchone()[0]
+                cur.execute(
+                    "UPDATE employees SET emp_code=('EMP-' || LPAD(%s::TEXT, 3, '0')) WHERE emp_id=%s",
+                    (emp_id, emp_id)
+                )
                 conn.commit(); conn.close()
                 info(self, "Success", "Employee added.")
                 self.refresh()
@@ -189,7 +236,7 @@ class EmployeesPage(QWidget):
     def _edit_employee(self, emp_id):
         try:
             conn = get_connection(); cur = conn.cursor()
-            cur.execute("""SELECT emp_code,first_name,last_name,dept_id,position_id,
+            cur.execute("""SELECT first_name,last_name,dept_id,position_id,
                                   hire_date,birth_date,gender,phone,email,address,classification,pay_schedule,status
                            FROM employees WHERE emp_id=%s""", (emp_id,))
             row = cur.fetchone(); conn.close()
@@ -199,7 +246,7 @@ class EmployeesPage(QWidget):
             data = dlg.get_data()
             try:
                 conn = get_connection(); cur = conn.cursor()
-                cur.execute("""UPDATE employees SET emp_code=%s,first_name=%s,last_name=%s,
+                cur.execute("""UPDATE employees SET first_name=%s,last_name=%s,
                     dept_id=%s,position_id=%s,hire_date=%s,birth_date=%s,gender=%s,
                     phone=%s,email=%s,address=%s,classification=%s,pay_schedule=%s,status=%s WHERE emp_id=%s""", data+(emp_id,))
                 conn.commit(); conn.close()
@@ -234,6 +281,7 @@ class EmployeeDialog(QDialog):
     def __init__(self, parent, depts, positions, existing=None):
         super().__init__(parent)
         self.depts = depts; self.positions = positions
+        self.is_edit = existing is not None
         self.setWindowTitle("Add Employee" if not existing else "Edit Employee")
         self.resize(760, 700)
         self.setMinimumSize(700, 640)
@@ -248,40 +296,48 @@ class EmployeeDialog(QDialog):
         layout = QVBoxLayout(self); layout.setContentsMargins(30,24,30,24); layout.setSpacing(18)
         form = QFormLayout(); form.setSpacing(14); form.setLabelAlignment(Qt.AlignRight|Qt.AlignVCenter)
 
-        self.f_code  = QLineEdit(ex[0] if ex else "")
-        self.f_first = QLineEdit(ex[1] if ex else "")
-        self.f_last  = QLineEdit(ex[2] if ex else "")
+        self.f_first = QLineEdit(ex[0] if ex else "")
+        self.f_last  = QLineEdit(ex[1] if ex else "")
 
         self.f_dept = QComboBox(); self.f_dept.addItems(list(self.depts.keys()))
-        if ex and ex[3]:
+        if ex and ex[2]:
             for n, did in self.depts.items():
-                if did == ex[3]: self.f_dept.setCurrentText(n)
+                if did == ex[2]: self.f_dept.setCurrentText(n)
 
-        self.f_pos = QComboBox(); self.f_pos.addItems(list(self.positions.keys()))
-        if ex and ex[4]:
-            for n, pid in self.positions.items():
-                if pid == ex[4]: self.f_pos.setCurrentText(n)
+        self.add_position_mode = not self.is_edit
+        self.fixed_positions = ["Cashier", "Front Desk", "Manager", "Utility"]
+        self.f_pos = QComboBox()
+        if self.add_position_mode:
+            self.f_pos.addItems(self.fixed_positions)
+        else:
+            self.f_pos.addItems(list(self.positions.keys()))
+            if ex and ex[3]:
+                for n, pid in self.positions.items():
+                    if pid == ex[3]: self.f_pos.setCurrentText(n)
 
         self.f_hire = QDateEdit(); self.f_hire.setCalendarPopup(True)
-        self.f_hire.setDate(QDate.fromString(str(ex[5]),"yyyy-MM-dd") if ex and ex[5] else QDate.currentDate())
+        self.f_hire.setDate(QDate.fromString(str(ex[4]),"yyyy-MM-dd") if ex and ex[4] else QDate.currentDate())
         self.f_bday = QDateEdit(); self.f_bday.setCalendarPopup(True)
-        self.f_bday.setDate(QDate.fromString(str(ex[6]),"yyyy-MM-dd") if ex and ex[6] else QDate(1990,1,1))
+        self.f_bday.setDate(QDate.fromString(str(ex[5]),"yyyy-MM-dd") if ex and ex[5] else QDate(1990,1,1))
         self.f_gender = QComboBox(); self.f_gender.addItems(["Male","Female","Other"])
-        if ex and ex[7]: self.f_gender.setCurrentText(ex[7])
-        self.f_phone = QLineEdit(ex[8] if ex and ex[8] else "")
-        self.f_email = QLineEdit(ex[9] if ex and ex[9] else "")
-        self.f_addr  = QTextEdit(ex[10] if ex and ex[10] else ""); self.f_addr.setFixedHeight(90)
+        if ex and ex[6]: self.f_gender.setCurrentText(ex[6])
+        self.f_phone = QLineEdit(ex[7] if ex and ex[7] else "")
+        self.f_email = QLineEdit(ex[8] if ex and ex[8] else "")
+        self.f_addr  = QTextEdit(ex[9] if ex and ex[9] else ""); self.f_addr.setFixedHeight(90)
         self.f_class = QComboBox(); self.f_class.addItems(["Regular","Non-Regular"])
-        if ex and ex[11]: self.f_class.setCurrentText(employee_category(ex[11]))
+        if ex and ex[10]: self.f_class.setCurrentText(employee_category(ex[10]))
         self.f_schedule = QComboBox(); self.f_schedule.addItems(["Weekly","Semi-Monthly"])
-        if ex and ex[12]: self.f_schedule.setCurrentText(ex[12])
+        if ex and ex[11]: self.f_schedule.setCurrentText(ex[11])
         self.f_status= QComboBox(); self.f_status.addItems(["Active","On Leave","Resigned","Terminated"])
-        if ex and ex[13]: self.f_status.setCurrentText(ex[13])
+        if ex and ex[12]:
+            self.f_status.setCurrentText(ex[12])
+        else:
+            self.f_status.setCurrentText("Active")
 
-        form.addRow("Employee Code *", self.f_code)
         form.addRow("First Name *",    self.f_first)
         form.addRow("Last Name *",     self.f_last)
-        form.addRow("Department",      self.f_dept)
+        if self.is_edit:
+            form.addRow("Department",      self.f_dept)
         form.addRow("Position",        self.f_pos)
         form.addRow("Hire Date",       self.f_hire)
         form.addRow("Birth Date",      self.f_bday)
@@ -291,7 +347,8 @@ class EmployeeDialog(QDialog):
         form.addRow("Address",         self.f_addr)
         form.addRow("Category",        self.f_class)
         form.addRow("Pay Schedule",    self.f_schedule)
-        form.addRow("Status",          self.f_status)
+        if self.is_edit:
+            form.addRow("Status",          self.f_status)
         layout.addLayout(form)
 
         btns = QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel)
@@ -301,21 +358,24 @@ class EmployeeDialog(QDialog):
         layout.addWidget(btns)
 
     def _validate(self):
-        if not self.f_code.text().strip():
-            QMessageBox.warning(self, "Validation", "Employee code is required."); return
         if not self.f_first.text().strip() or not self.f_last.text().strip():
             QMessageBox.warning(self, "Validation", "First and last name are required."); return
         self.accept()
 
     def get_data(self):
+        selected_pos = self.f_pos.currentText()
+        dept_id = self.depts.get(self.f_dept.currentText()) if self.is_edit else self.depts.get("Front Desk")
+        pos_id = self.positions.get(selected_pos)
         return (
-            self.f_code.text().strip(), self.f_first.text().strip(), self.f_last.text().strip(),
-            self.depts.get(self.f_dept.currentText()), self.positions.get(self.f_pos.currentText()),
+            self.f_first.text().strip(), self.f_last.text().strip(),
+            dept_id, pos_id,
             self.f_hire.date().toString("yyyy-MM-dd"), self.f_bday.date().toString("yyyy-MM-dd"),
             self.f_gender.currentText(), self.f_phone.text().strip(),
             self.f_email.text().strip(), self.f_addr.toPlainText().strip(),
             self.f_class.currentText(),
             self.f_schedule.currentText(),
-            self.f_status.currentText()
+            (self.f_status.currentText() if self.is_edit else "Active")
         )
+
+
 

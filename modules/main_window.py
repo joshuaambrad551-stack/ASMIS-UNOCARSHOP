@@ -99,14 +99,14 @@ class MainWindow(QMainWindow):
 
         # Nav items
         self.nav_items = [
-            ("📊", "Dashboard"),
-            ("👥", "Employees"),
-            ("🕐", "Attendance"),
-            ("💰", "Payroll"),
-            ("📦", "Inventory"),
-            ("🚗", "Customers"),
-            ("🔧", "Service Orders"),
-            ("🧾", "Billing"),
+            ("\U0001F4CA", "Dashboard"),
+            ("\U0001F465", "Employees"),
+            ("\U0001F550", "Attendance"),
+            ("\U0001F4B0", "Payroll"),
+            ("\U0001F4E6", "Inventory"),
+            ("\U0001F697", "Customers"),
+            ("\U0001F527", "Service Orders"),
+            ("\U0001F9FE", "Billing"),
         ]
 
         sec = QLabel("CORE MODULES")
@@ -135,12 +135,12 @@ class MainWindow(QMainWindow):
         u_layout.setContentsMargins(16, 12, 16, 12)
         u_layout.setSpacing(4)
 
-        lbl_name = QLabel(f"👤  {self.user[1]}")
+        lbl_name = QLabel(f"\U0001F464  {self.user[1]}")
         lbl_name.setStyleSheet("color: white; font-size: 12px; font-weight: 600; border: none;")
         lbl_role = QLabel(self.user[2].upper())
         lbl_role.setStyleSheet(f"color: {RED}; font-size: 10px; letter-spacing: 1px; border: none;")
 
-        btn_logout = QPushButton("⏏  Logout")
+        btn_logout = QPushButton("\u23FB  Logout")
         btn_logout.setCursor(Qt.PointingHandCursor)
         btn_logout.setFixedHeight(32)
         btn_logout.setStyleSheet("""
@@ -354,3 +354,4 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     w = MainWindow((1, "Administrator", "owner", {}))
     sys.exit(app.exec_())
+

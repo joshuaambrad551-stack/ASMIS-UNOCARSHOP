@@ -1,4 +1,4 @@
-﻿"""
+"""
 modules/service_orders.py
 UnoCarshop ASMIS - Service Orders (Integrated v2)
 
@@ -58,10 +58,10 @@ class ServiceOrdersPage(QWidget):
 
         # Stats
         stats = QHBoxLayout(); stats.setSpacing(12)
-        self.s_pending  = StatCard("Pending",     "0", "?", ORANGE)
-        self.s_inprog   = StatCard("In Progress", "0", "?", BLUE)
-        self.s_done     = StatCard("Completed",   "0", "?", GREEN)
-        self.s_cancel   = StatCard("Cancelled",   "0", "?", RED)
+        self.s_pending  = StatCard("Pending",     "0", "\u23F3", ORANGE)
+        self.s_inprog   = StatCard("In Progress", "0", "\U0001F504", BLUE)
+        self.s_done     = StatCard("Completed",   "0", "\u2705", GREEN)
+        self.s_cancel   = StatCard("Cancelled",   "0", "\u274C", RED)
         for s in [self.s_pending, self.s_inprog, self.s_done, self.s_cancel]:
             s.setFixedHeight(88); stats.addWidget(s)
         layout.addLayout(stats)
@@ -84,7 +84,7 @@ class ServiceOrdersPage(QWidget):
         self.priority_filter.setStyleSheet(self._cs())
         self.priority_filter.currentIndexChanged.connect(self._filter)
 
-        btn_add     = OrangeButton("?  New Order")
+        btn_add     = OrangeButton("\U0001F9F0  New Order")
         btn_add.clicked.connect(self._add_order)
         btn_refresh = GhostButton("Refresh")
         btn_refresh.clicked.connect(self.refresh)
@@ -167,7 +167,7 @@ class ServiceOrdersPage(QWidget):
             self._order_ids = []
             for rd in rows:
                 r = self.table.rowCount()
-                self.table.insertRow(r); self.table.setRowHeight(r, 38)
+                self.table.insertRow(r); self.table.setRowHeight(r, 44)
                 self._order_ids.append(rd[0])
                 for c, val in enumerate(rd[1:8]):
                     item = QTableWidgetItem(str(val) if val else "")
@@ -587,7 +587,7 @@ class PartsDialog(QDialog):
             for rd in rows:
                 r = self.parts_table.rowCount()
                 self.parts_table.insertRow(r)
-                self.parts_table.setRowHeight(r, 36)
+                self.parts_table.setRowHeight(r, 42)
                 for c, val in enumerate(rd[1:]):
                     text = f"PHP {float(val):,.2f}" if c in (2,3) else str(val)
                     item = QTableWidgetItem(text)
@@ -664,4 +664,6 @@ class PartsDialog(QDialog):
                 bus.dashboard_refresh.emit()
             except Exception as e:
                 error(self, "Error", str(e))
+
+
 

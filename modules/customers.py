@@ -1,4 +1,4 @@
-﻿"""
+"""
 modules/customers.py
 UnoCarshop ASMIS - Customers & Vehicles (Integrated v2)
 
@@ -59,9 +59,9 @@ class CustomersPage(QWidget):
         layout.setSpacing(16)
 
         stats = QHBoxLayout(); stats.setSpacing(12)
-        self.s_cust = StatCard("Total Customers", "0", "?", ORANGE)
-        self.s_veh  = StatCard("Total Vehicles",  "0", "?", BLUE)
-        self.s_orders= StatCard("Active Orders",  "0", "?", GREEN)
+        self.s_cust = StatCard("Total Customers", "0", "\U0001F464", ORANGE)
+        self.s_veh  = StatCard("Total Vehicles",  "0", "\U0001F697", BLUE)
+        self.s_orders= StatCard("Active Orders",  "0", "\U0001F6E0\uFE0F", GREEN)
         for s in [self.s_cust, self.s_veh, self.s_orders]:
             s.setFixedHeight(88); stats.addWidget(s)
         stats.addStretch()
@@ -76,7 +76,7 @@ class CustomersPage(QWidget):
         self.cust_search = SearchBar("Search customers...")
         self.cust_search.setFixedWidth(280)
         self.cust_search.textChanged.connect(self._filter_customers)
-        btn_add = OrangeButton("?  Add Customer"); btn_add.clicked.connect(self._add_customer)
+        btn_add = OrangeButton("\U0001F464  Add Customer"); btn_add.clicked.connect(self._add_customer)
         btn_ref = GhostButton("Refresh");       btn_ref.clicked.connect(self.refresh)
         toolbar.addWidget(self.cust_search); toolbar.addStretch()
         btn_add = OrangeButton("Add Customer + Vehicle"); btn_add.clicked.connect(self._add_customer)
@@ -104,7 +104,7 @@ class CustomersPage(QWidget):
         self.veh_search = SearchBar("Search by plate, brand, model, owner...")
         self.veh_search.setFixedWidth(300)
         self.veh_search.textChanged.connect(self._filter_vehicles)
-        btn_add = OrangeButton("?  Add Vehicle"); btn_add.clicked.connect(self._add_vehicle)
+        btn_add = OrangeButton("\U0001F697  Add Vehicle"); btn_add.clicked.connect(self._add_vehicle)
         btn_ref = GhostButton("Refresh");      btn_ref.clicked.connect(self.refresh)
         toolbar.addWidget(self.veh_search); toolbar.addStretch()
         toolbar.addWidget(btn_ref); toolbar.addWidget(btn_add)
@@ -162,7 +162,7 @@ class CustomersPage(QWidget):
             self._cust_ids = []
             for rd in rows:
                 r = self.cust_table.rowCount()
-                self.cust_table.insertRow(r); self.cust_table.setRowHeight(r, 38)
+                self.cust_table.insertRow(r); self.cust_table.setRowHeight(r, 44)
                 self._cust_ids.append(rd[0])
                 for c, val in enumerate(rd[1:7]):
                     item = QTableWidgetItem(str(val) if val else "")
@@ -213,7 +213,7 @@ class CustomersPage(QWidget):
             self._veh_ids = []
             for rd in rows:
                 r = self.veh_table.rowCount()
-                self.veh_table.insertRow(r); self.veh_table.setRowHeight(r, 38)
+                self.veh_table.insertRow(r); self.veh_table.setRowHeight(r, 44)
                 self._veh_ids.append(rd[0])
                 for c, val in enumerate(rd[1:7]):
                     item = QTableWidgetItem(str(val) if val else "")
@@ -239,7 +239,7 @@ class CustomersPage(QWidget):
     def _filter_customers(self): self._load_customers(self.cust_search.text())
     def _filter_vehicles(self):  self._load_vehicles(self.veh_search.text())
 
-    # â”€â”€ Customer CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Customer CRUD ─────────────────────────────────────
     def _add_customer(self):
         dlg = CustomerVehicleDialog(self)
         if dlg.exec_() == QDialog.Accepted:
@@ -330,7 +330,7 @@ class CustomersPage(QWidget):
                 bus.dashboard_refresh.emit()
             except Exception as e: error(self, "Error", str(e))
 
-    # â”€â”€ Vehicle CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Vehicle CRUD ──────────────────────────────────────
     def _show_customer_vehicles(self, cust_id):
         dlg = CustomerVehiclesDialog(self, cust_id)
         dlg.exec_()
@@ -743,7 +743,7 @@ class CustomerVehiclesDialog(QDialog):
         self.table.setRowCount(0)
         for rd in rows:
             r = self.table.rowCount()
-            self.table.insertRow(r); self.table.setRowHeight(r, 38)
+            self.table.insertRow(r); self.table.setRowHeight(r, 44)
             for c, val in enumerate(rd[1:6]):
                 item = QTableWidgetItem(str(val) if val else "")
                 item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
@@ -773,4 +773,6 @@ class CustomerVehiclesDialog(QDialog):
     def _delete_vehicle(self, vehicle_id):
         self.page._delete_vehicle(vehicle_id)
         self._load()
+
+
 

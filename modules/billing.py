@@ -1,4 +1,4 @@
-﻿"""
+"""
 modules/billing.py
 UnoCarshop ASMIS - Billing
 - Auto-created when service order is marked Completed
@@ -64,10 +64,10 @@ class BillingPage(QWidget):
 
         stats = QHBoxLayout()
         stats.setSpacing(12)
-        self.s_total = StatCard("Total Billed", "PHP 0", "INV", ORANGE)
-        self.s_parts = StatCard("Parts Subtotal", "PHP 0", "ITM", GREEN)
-        self.s_labor = StatCard("Manpower", "PHP 0", "LAB", RED)
-        self.s_count = StatCard("Total Invoices", "0", "DOC", BLUE)
+        self.s_total = StatCard("Total Billed", "PHP 0", "\U0001F9FE", ORANGE)
+        self.s_parts = StatCard("Parts Subtotal", "PHP 0", "\U0001F9E9", GREEN)
+        self.s_labor = StatCard("Manpower", "PHP 0", "\U0001F477", RED)
+        self.s_count = StatCard("Total Invoices", "0", "\U0001F4C4", BLUE)
         for s in [self.s_total, self.s_parts, self.s_labor, self.s_count]:
             s.setFixedHeight(88)
             stats.addWidget(s)
@@ -92,7 +92,7 @@ class BillingPage(QWidget):
         self.status_filter.setStyleSheet(self._cs())
         self.status_filter.currentIndexChanged.connect(self._filter)
 
-        btn_add = OrangeButton("+ New Invoice")
+        btn_add = OrangeButton("\U0001F9FE  New Invoice")
         btn_add.clicked.connect(self._add_bill)
         btn_ref = GhostButton("Refresh")
         btn_ref.clicked.connect(self.refresh)
@@ -163,7 +163,7 @@ class BillingPage(QWidget):
             for rd in rows:
                 r = self.table.rowCount()
                 self.table.insertRow(r)
-                self.table.setRowHeight(r, 38)
+                self.table.setRowHeight(r, 44)
                 for c, val in enumerate(rd[1:7]):
                     text = f"PHP {float(val):,.2f}" if c in (3, 4, 5) else str(val) if val else ""
                     item = QTableWidgetItem(text)
@@ -691,4 +691,6 @@ class BillingDialog(QDialog):
             self.f_method.currentText(),
             self.f_date.date().toString("yyyy-MM-dd"),
         )
+
+
 

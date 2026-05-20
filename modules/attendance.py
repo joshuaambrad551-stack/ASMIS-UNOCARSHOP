@@ -1,4 +1,4 @@
-﻿"""
+"""
 modules/attendance.py
 UnoCarshop ASMIS - Attendance Module (Integrated v2)
 
@@ -50,11 +50,11 @@ class AttendancePage(QWidget):
         # Summary cards
         stats_row = QHBoxLayout()
         stats_row.setSpacing(12)
-        self.s_present = StatCard("Present Today",  "0", "?", GREEN)
-        self.s_absent  = StatCard("Absent Today",   "0", "?", RED)
-        self.s_late    = StatCard("Late Today",     "0", "?", ORANGE)
-        self.s_onleave = StatCard("On Leave Today", "0", "?", BLUE)
-        self.s_halfday = StatCard("Half Day Today", "0", "?", "#9b59b6")
+        self.s_present = StatCard("Present Today",  "0", "\u2705", GREEN)
+        self.s_absent  = StatCard("Absent Today",   "0", "\u274C", RED)
+        self.s_late    = StatCard("Late Today",     "0", "\u23F0", ORANGE)
+        self.s_onleave = StatCard("On Leave Today", "0", "\U0001F3D6\uFE0F", BLUE)
+        self.s_halfday = StatCard("Half Day Today", "0", "\U0001F313", "#9b59b6")
         for s in [self.s_present, self.s_absent, self.s_late, self.s_onleave, self.s_halfday]:
             s.setFixedHeight(88)
             stats_row.addWidget(s)
@@ -86,7 +86,7 @@ class AttendancePage(QWidget):
         btn_save.clicked.connect(self._save_all)
         btn_refresh = GhostButton("Refresh")
         btn_refresh.clicked.connect(self.refresh)
-        btn_manual  = GhostButton("?  Manual Entry")
+        btn_manual  = GhostButton("\U0001F4DD  Manual Entry")
         btn_manual.clicked.connect(self._manual_record)
 
         toolbar.addWidget(lbl_date)
@@ -143,7 +143,7 @@ class AttendancePage(QWidget):
         self.table.setSortingEnabled(False)
         layout.addWidget(self.table)
 
-    # â”€â”€ Data loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Data loading ──────────────────────────────────────
     def refresh(self):
         self._inline_combos.clear()
         self._emp_rows.clear()
@@ -190,7 +190,7 @@ class AttendancePage(QWidget):
 
                 r = self.table.rowCount()
                 self.table.insertRow(r)
-                self.table.setRowHeight(r, 40)
+                self.table.setRowHeight(r, 44)
                 self._emp_rows[emp_id] = r
 
                 num = QTableWidgetItem(str(idx + 1))
@@ -283,7 +283,7 @@ class AttendancePage(QWidget):
             ok_dept   = dept == "All Departments" or d == dept
             self.table.setRowHidden(row, not (ok_search and ok_dept))
 
-    # â”€â”€ Save logic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Save logic ────────────────────────────────────────
     def _save_one(self, emp_id):
         date_str = self.date_filter.date().toString("yyyy-MM-dd")
         combo    = self._inline_combos.get(emp_id)
@@ -490,4 +490,6 @@ class AttendanceDialog(QDialog):
             self.f_out.time().toString("HH:mm"),
             "Late" if self.f_status.currentText() == "Present" and self.f_in.time() > QTime(8, 0) else self.f_status.currentText(),
         )
+
+
 
