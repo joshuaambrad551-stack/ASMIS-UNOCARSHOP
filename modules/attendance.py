@@ -257,8 +257,12 @@ class AttendancePage(QWidget):
     def _status_from_times(self, selected_status, time_in, time_out):
         if selected_status in ("Absent", "Half Day", "On Leave"):
             return selected_status
-        if time_in and time_in > "08:00":
-            return "Late"
+        if time_in:
+            parsed = QTime.fromString(time_in, "HH:mm")
+            if not parsed.isValid():
+                parsed = QTime.fromString(time_in, "H:mm")
+            if parsed.isValid() and parsed > QTime(8, 0):
+                return "Late"
         return "Present"
 
     def _mark_all(self, status):

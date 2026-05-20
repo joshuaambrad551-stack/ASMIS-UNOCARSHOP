@@ -309,8 +309,6 @@ class DashboardPage(QWidget):
     def _load_recent_billing(self):
         try:
             conn = get_connection(); cur = conn.cursor()
-            cur.execute("ALTER TABLE billing ADD COLUMN IF NOT EXISTS manpower NUMERIC(10,2) DEFAULT 0")
-            conn.commit()
             cur.execute("""
                 SELECT b.bill_no, c.full_name, b.subtotal, COALESCE(b.manpower,0), b.total, b.status
                 FROM billing b

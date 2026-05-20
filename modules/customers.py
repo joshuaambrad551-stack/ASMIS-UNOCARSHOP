@@ -68,16 +68,6 @@ class CustomersPage(QWidget):
         layout.addLayout(stats)
 
         layout.addWidget(self._build_customers_tab())
-        return
-        tabs.setStyleSheet("""
-            QTabWidget::pane{border:1px solid #d7dee8;border-radius:10px;background:white;}
-            QTabBar::tab{background:#f3f6fb;border:1px solid #d7dee8;border-radius:6px;
-                padding:8px 20px;font-size:13px;margin-right:4px;}
-            QTabBar::tab:selected{background:#0b1f3a;color:white;font-weight:700;}
-        """)
-        tabs.addTab(self._build_customers_tab(), "Customers")
-        tabs.addTab(self._build_vehicles_tab(),  "Vehicles")
-        layout.addWidget(tabs)
 
     def _build_customers_tab(self):
         w = QWidget(); w.setStyleSheet("background:white;")
@@ -259,19 +249,17 @@ class CustomersPage(QWidget):
                        (cust_code,first_name,last_name,phone,email,address,
                         payment_type,coverage_type,insurance_provider,loa_amount,assured_share)
                        VALUES (
-                        COALESCE(
-                            (
-                                SELECT 'CUST-' || LPAD((COALESCE(MAX(CAST(SUBSTRING(cust_code FROM '[0-9]+$') AS INT)),0) + 1)::TEXT, 3, '0')
-                                FROM customers
-                            ),
-                            'CUST-001'
-                        ),
+                        ('TMP-' || SUBSTRING(MD5(RANDOM()::TEXT || CLOCK_TIMESTAMP()::TEXT), 1, 10)),
                         %s,%s,%s,%s,%s,%s,%s,%s,%s,%s
                        )
                        RETURNING cust_id""",
                     cust_data
                 )
                 cust_id = cur.fetchone()[0]
+                cur.execute(
+                    "UPDATE customers SET cust_code=('CUST-' || LPAD(%s::TEXT, 3, '0')) WHERE cust_id=%s",
+                    (cust_id, cust_id)
+                )
                 cur.execute(
                     "INSERT INTO vehicles (cust_id,plate_no,make,model,year,color) VALUES (%s,%s,%s,%s,%s,%s)",
                     (cust_id,) + vehicle_data

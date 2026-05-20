@@ -13,6 +13,7 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt
 
 from modules.login import LoginWindow
+from db.bootstrap import ensure_runtime_schema
 
 
 def main():
@@ -20,6 +21,7 @@ def main():
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
+    ensure_runtime_schema()
     app = QApplication(sys.argv)
     app.setApplicationName("UnoCarshop ASMIS")
     app.setOrganizationName("UnoCarshop")

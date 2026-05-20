@@ -241,6 +241,10 @@ class ServiceOrdersPage(QWidget):
                 FROM service_orders WHERE order_id=%s
             """, (order_id,))
             row = cur.fetchone()
+            if not row:
+                conn.close()
+                error(self, "Error", "Service order not found.")
+                return
             old_status = row[5]
             conn.close()
         except Exception as e:
@@ -289,7 +293,12 @@ class ServiceOrdersPage(QWidget):
                 conn = get_connection(); cur = conn.cursor()
                 # Remove billing first (FK)
                 cur.execute("DELETE FROM billing WHERE order_id=%s", (order_id,))
-                cur.execute("DELETE FROM service_order_parts WHERE order_id=%s", (order_id,))
+                cur.execute("""
+                    SELECT EXISTS(SELECT 1 FROM information_schema.tables
+                    WHERE table_schema='public' AND table_name='service_order_parts')
+                """)
+                if cur.fetchone()[0]:
+                    cur.execute("DELETE FROM service_order_parts WHERE order_id=%s", (order_id,))
                 cur.execute("DELETE FROM service_orders WHERE order_id=%s", (order_id,))
                 conn.commit(); conn.close()
                 self.refresh()

@@ -108,9 +108,6 @@ class InventoryPage(QWidget):
     def _load_categories(self):
         try:
             conn = get_connection(); cur = conn.cursor()
-            # Ensure Consumables and Suspension are removed
-            cur.execute("DELETE FROM inventory_categories WHERE cat_name IN ('Consumables','Suspension')")
-            conn.commit()
             cur.execute("SELECT cat_id, cat_name FROM inventory_categories ORDER BY cat_name")
             rows = cur.fetchall(); conn.close()
             self._categories = {r[1]: r[0] for r in rows}
