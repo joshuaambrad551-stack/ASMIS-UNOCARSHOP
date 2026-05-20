@@ -39,3 +39,24 @@ DROP CONSTRAINT IF EXISTS customers_coverage_type_check;
 ALTER TABLE customers
 ADD CONSTRAINT customers_coverage_type_check
 CHECK (coverage_type IN ('Own Damage','Property Damage'));
+
+ALTER TABLE customers
+DROP CONSTRAINT IF EXISTS customers_insurance_fields_check;
+
+ALTER TABLE customers
+ADD CONSTRAINT customers_insurance_fields_check
+CHECK (
+    (
+        payment_type = 'Insurance'
+        AND insurance_provider IS NOT NULL
+        AND btrim(insurance_provider) <> ''
+        AND COALESCE(loa_amount, 0) >= 0
+        AND COALESCE(assured_share, 0) >= 0
+    )
+    OR
+    (
+        payment_type = 'Cash'
+        AND COALESCE(loa_amount, 0) = 0
+        AND COALESCE(assured_share, 0) = 0
+    )
+);

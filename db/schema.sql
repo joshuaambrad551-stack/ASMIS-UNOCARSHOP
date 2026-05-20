@@ -146,6 +146,21 @@ CREATE TABLE IF NOT EXISTS customers (
     insurance_provider VARCHAR(160),
     loa_amount   NUMERIC(12,2) DEFAULT 0,
     assured_share NUMERIC(12,2) DEFAULT 0,
+    CONSTRAINT customers_insurance_fields_check CHECK (
+        (
+            payment_type = 'Insurance'
+            AND insurance_provider IS NOT NULL
+            AND btrim(insurance_provider) <> ''
+            AND COALESCE(loa_amount, 0) >= 0
+            AND COALESCE(assured_share, 0) >= 0
+        )
+        OR
+        (
+            payment_type = 'Cash'
+            AND COALESCE(loa_amount, 0) = 0
+            AND COALESCE(assured_share, 0) = 0
+        )
+    ),
     created_at   TIMESTAMP DEFAULT NOW()
 );
 

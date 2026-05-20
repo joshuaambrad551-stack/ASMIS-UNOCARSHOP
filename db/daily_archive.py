@@ -73,6 +73,7 @@ def build_daily_snapshot(snapshot_date):
     with db_cursor() as cur:
         params = (snapshot_date,)
         has_appointments = _table_exists(cur, "appointments")
+        has_insurance = _table_exists(cur, "insurance")
         summary = {
             "total_customers": _scalar(cur, "SELECT COUNT(*) FROM customers"),
             "total_vehicles": _scalar(cur, "SELECT COUNT(*) FROM vehicles"),
@@ -195,7 +196,7 @@ def build_daily_snapshot(snapshot_date):
                 LEFT JOIN vehicles v ON i.vehicle_id=v.vehicle_id
                 WHERE i.created_at::date=%s
                 ORDER BY i.created_at
-            """, params),
+            """, params) if has_insurance else [],
         }
         return summary, details
 

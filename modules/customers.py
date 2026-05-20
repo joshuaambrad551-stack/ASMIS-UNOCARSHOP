@@ -258,7 +258,16 @@ class CustomersPage(QWidget):
                     """INSERT INTO customers
                        (cust_code,first_name,last_name,phone,email,address,
                         payment_type,coverage_type,insurance_provider,loa_amount,assured_share)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                       VALUES (
+                        COALESCE(
+                            (
+                                SELECT 'CUST-' || LPAD((COALESCE(MAX(CAST(SUBSTRING(cust_code FROM '[0-9]+$') AS INT)),0) + 1)::TEXT, 3, '0')
+                                FROM customers
+                            ),
+                            'CUST-001'
+                        ),
+                        %s,%s,%s,%s,%s,%s,%s,%s,%s,%s
+                       )
                        RETURNING cust_id""",
                     cust_data
                 )
@@ -278,7 +287,7 @@ class CustomersPage(QWidget):
     def _edit_customer(self, cust_id):
         try:
             conn = get_connection(); cur = conn.cursor()
-            cur.execute("""SELECT cust_code,first_name,last_name,phone,email,address,
+            cur.execute("""SELECT first_name,last_name,phone,email,address,
                                   COALESCE(payment_type,'Cash'),
                                   COALESCE(coverage_type,'Own Damage'),
                                   COALESCE(insurance_provider,''),
@@ -293,7 +302,7 @@ class CustomersPage(QWidget):
             try:
                 conn = get_connection(); cur = conn.cursor()
                 cur.execute("""UPDATE customers
-                               SET cust_code=%s,first_name=%s,last_name=%s,phone=%s,email=%s,address=%s,
+                               SET first_name=%s,last_name=%s,phone=%s,email=%s,address=%s,
                                    payment_type=%s,coverage_type=%s,insurance_provider=%s,
                                    loa_amount=%s,assured_share=%s
                                WHERE cust_id=%s""", data+(cust_id,))
@@ -311,18 +320,17 @@ class CustomersPage(QWidget):
                 cur.execute("""
                     SELECT
                         (SELECT COUNT(*) FROM service_orders WHERE cust_id=%s),
-                        (SELECT COUNT(*) FROM insurance WHERE cust_id=%s AND status!='Cancelled'),
                         (SELECT COUNT(*) FROM billing WHERE cust_id=%s AND status!='Void')
-                """, (cust_id, cust_id, cust_id))
-                order_count, insurance_count, billing_count = cur.fetchone()
-                if order_count or insurance_count or billing_count:
+                """, (cust_id, cust_id))
+                order_count, billing_count = cur.fetchone()
+                if order_count or billing_count:
                     conn.close()
                     error(
                         self,
                         "Cannot Delete Customer",
                         "This customer is still linked to "
-                        f"{order_count} service order(s), {insurance_count} insurance policy(ies), "
-                        f"and {billing_count} bill(s). Delete or reassign those records first."
+                        f"{order_count} service order(s) and {billing_count} bill(s). "
+                        "Delete or reassign those records first."
                     )
                     return
                 cur.execute("DELETE FROM customers WHERE cust_id=%s", (cust_id,))
@@ -413,17 +421,16 @@ class CustomersPage(QWidget):
                 conn = get_connection(); cur = conn.cursor()
                 cur.execute("""
                     SELECT
-                        (SELECT COUNT(*) FROM service_orders WHERE vehicle_id=%s),
-                        (SELECT COUNT(*) FROM insurance WHERE vehicle_id=%s AND status!='Cancelled')
-                """, (vehicle_id, vehicle_id))
-                order_count, insurance_count = cur.fetchone()
-                if order_count or insurance_count:
+                        (SELECT COUNT(*) FROM service_orders WHERE vehicle_id=%s)
+                """, (vehicle_id,))
+                order_count = cur.fetchone()[0]
+                if order_count:
                     conn.close()
                     error(
                         self,
                         "Cannot Delete Vehicle",
                         "This vehicle is still linked to "
-                        f"{order_count} service order(s) and {insurance_count} insurance policy(ies). "
+                        f"{order_count} service order(s). "
                         "Delete or reassign those records first."
                     )
                     return
@@ -439,29 +446,28 @@ class CustomerDialog(QDialog):
     def __init__(self, parent, existing=None):
         super().__init__(parent)
         self.setWindowTitle("Customer")
-        self.setFixedWidth(560)
+        self.resize(760, 700)
+        self.setMinimumSize(700, 640)
         self.setStyleSheet("QDialog{background:#f3f6fb;font-family:'Segoe UI';}"
                            "QLineEdit,QTextEdit,QComboBox,QDoubleSpinBox{border:1px solid #d7dee8;border-radius:7px;padding:6px 10px;font-size:13px;background:white;}")
         layout = QVBoxLayout(self); layout.setContentsMargins(28,22,28,22)
         form = QFormLayout(); form.setSpacing(14); form.setLabelAlignment(Qt.AlignRight|Qt.AlignVCenter)
-        self.f_code  = QLineEdit(existing[0] if existing else "")
-        self.f_first = QLineEdit(existing[1] if existing else "")
-        self.f_last  = QLineEdit(existing[2] if existing else "")
-        self.f_phone = QLineEdit(existing[3] if existing and existing[3] else "")
-        self.f_email = QLineEdit(existing[4] if existing and existing[4] else "")
-        self.f_addr  = QTextEdit(existing[5] if existing and existing[5] else ""); self.f_addr.setFixedHeight(90)
+        self.f_first = QLineEdit(existing[0] if existing else "")
+        self.f_last  = QLineEdit(existing[1] if existing else "")
+        self.f_phone = QLineEdit(existing[2] if existing and existing[2] else "")
+        self.f_email = QLineEdit(existing[3] if existing and existing[3] else "")
+        self.f_addr  = QTextEdit(existing[4] if existing and existing[4] else ""); self.f_addr.setFixedHeight(90)
         self.f_payment = QComboBox(); self.f_payment.addItems(["Cash", "Insurance"])
-        self.f_payment.setCurrentText(existing[6] if existing and existing[6] else "Cash")
+        self.f_payment.setCurrentText(existing[5] if existing and existing[5] else "Cash")
         self.f_coverage = QComboBox(); self.f_coverage.addItems(["Own Damage", "Property Damage"])
-        self.f_coverage.setCurrentText(existing[7] if existing and existing[7] else "Own Damage")
+        self.f_coverage.setCurrentText(existing[6] if existing and existing[6] else "Own Damage")
         self.f_provider = QComboBox(); self.f_provider.addItems(INSURANCE_PROVIDERS)
-        if existing and existing[8]:
-            self.f_provider.setCurrentText(existing[8])
+        if existing and existing[7]:
+            self.f_provider.setCurrentText(existing[7])
         self.f_loa = QDoubleSpinBox(); self.f_loa.setMaximum(99999999); self.f_loa.setDecimals(2)
-        self.f_loa.setPrefix("PHP "); self.f_loa.setValue(float(existing[9]) if existing else 0)
+        self.f_loa.setPrefix("PHP "); self.f_loa.setValue(float(existing[8]) if existing else 0)
         self.f_assured = QDoubleSpinBox(); self.f_assured.setMaximum(99999999); self.f_assured.setDecimals(2)
-        self.f_assured.setPrefix("PHP "); self.f_assured.setValue(float(existing[10]) if existing else 0)
-        form.addRow("Cust. Code *", self.f_code)
+        self.f_assured.setPrefix("PHP "); self.f_assured.setValue(float(existing[9]) if existing else 0)
         form.addRow("First Name *", self.f_first)
         form.addRow("Last Name *",  self.f_last)
         form.addRow("Phone",        self.f_phone)
@@ -469,7 +475,7 @@ class CustomerDialog(QDialog):
         form.addRow("Address",      self.f_addr)
         form.addRow("Payment Type *", self.f_payment)
         form.addRow("Coverage *", self.f_coverage)
-        self.provider_label = QLabel("Insurance Provider *")
+        self.provider_label = QLabel("Insurance *")
         self.loa_label = QLabel("Letter of Authority Amount *")
         self.assured_label = QLabel("Assured Share *")
         form.addRow(self.provider_label, self.f_provider)
@@ -484,9 +490,19 @@ class CustomerDialog(QDialog):
         btns.accepted.connect(self.accept); btns.rejected.connect(self.reject)
         layout.addWidget(btns)
 
+    def accept(self):
+        if not self.f_first.text().strip() or not self.f_last.text().strip():
+            error(self, "Validation", "First name and last name are required.")
+            return
+        if self.f_payment.currentText() == "Insurance":
+            if not self.f_provider.currentText().strip():
+                error(self, "Validation", "Insurance provider is required.")
+                return
+        super().accept()
+
     def get_data(self):
         is_insured = self.f_payment.currentText() == "Insurance"
-        return (self.f_code.text().strip(), self.f_first.text().strip(),
+        return (self.f_first.text().strip(),
                 self.f_last.text().strip(), self.f_phone.text().strip(),
                 self.f_email.text().strip(), self.f_addr.toPlainText().strip(),
                 self.f_payment.currentText().strip(),
@@ -506,8 +522,8 @@ class CustomerVehicleDialog(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
         self.setWindowTitle("Add Customer and Vehicle")
-        self.resize(820, 700)
-        self.setMinimumSize(760, 640)
+        self.resize(980, 820)
+        self.setMinimumSize(900, 760)
         self.setStyleSheet("QDialog{background:#f3f6fb;font-family:'Segoe UI';}"
                            "QLineEdit,QTextEdit,QSpinBox,QComboBox,QDoubleSpinBox{border:1px solid #d7dee8;border-radius:8px;padding:9px 12px;font-size:15px;background:white;min-height:40px;}"
                            "QLabel{font-size:15px;color:#3b362f;}")
@@ -525,7 +541,6 @@ class CustomerVehicleDialog(QDialog):
         section_customer.setStyleSheet("font-size:18px;font-weight:700;color:#0b1f3a;")
         content_layout.addWidget(section_customer)
         cust_form = QFormLayout(); cust_form.setSpacing(16); cust_form.setLabelAlignment(Qt.AlignRight|Qt.AlignVCenter)
-        self.f_code  = QLineEdit()
         self.f_first = QLineEdit()
         self.f_last  = QLineEdit()
         self.f_phone = QLineEdit()
@@ -536,7 +551,6 @@ class CustomerVehicleDialog(QDialog):
         self.f_provider = QComboBox(); self.f_provider.addItems(INSURANCE_PROVIDERS)
         self.f_loa = QDoubleSpinBox(); self.f_loa.setMaximum(99999999); self.f_loa.setDecimals(2); self.f_loa.setPrefix("PHP ")
         self.f_assured = QDoubleSpinBox(); self.f_assured.setMaximum(99999999); self.f_assured.setDecimals(2); self.f_assured.setPrefix("PHP ")
-        cust_form.addRow("Cust. Code *", self.f_code)
         cust_form.addRow("First Name *", self.f_first)
         cust_form.addRow("Last Name *",  self.f_last)
         cust_form.addRow("Phone",        self.f_phone)
@@ -544,7 +558,7 @@ class CustomerVehicleDialog(QDialog):
         cust_form.addRow("Address",      self.f_addr)
         cust_form.addRow("Payment Type *", self.f_payment)
         cust_form.addRow("Coverage *", self.f_coverage)
-        self.provider_label = QLabel("Insurance Provider *")
+        self.provider_label = QLabel("Insurance *")
         self.loa_label = QLabel("Letter of Authority Amount *")
         self.assured_label = QLabel("Assured Share *")
         cust_form.addRow(self.provider_label, self.f_provider)
@@ -580,8 +594,8 @@ class CustomerVehicleDialog(QDialog):
         layout.addWidget(btns)
 
     def accept(self):
-        if not self.f_code.text().strip() or not self.f_first.text().strip() or not self.f_last.text().strip():
-            error(self, "Validation", "Customer code, first name, and last name are required.")
+        if not self.f_first.text().strip() or not self.f_last.text().strip():
+            error(self, "Validation", "First name and last name are required.")
             return
         if not self.f_plate.text().strip():
             error(self, "Validation", "Plate number is required.")
@@ -595,7 +609,6 @@ class CustomerVehicleDialog(QDialog):
     def get_data(self):
         is_insured = self.f_payment.currentText() == "Insurance"
         customer = (
-            self.f_code.text().strip(),
             self.f_first.text().strip(),
             self.f_last.text().strip(),
             self.f_phone.text().strip(),

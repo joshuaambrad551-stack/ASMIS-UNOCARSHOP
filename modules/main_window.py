@@ -107,7 +107,6 @@ class MainWindow(QMainWindow):
             ("🚗", "Customers"),
             ("🔧", "Service Orders"),
             ("🧾", "Billing"),
-            ("🛡️", "Insurance"),
         ]
 
         sec = QLabel("CORE MODULES")
@@ -228,9 +227,6 @@ class MainWindow(QMainWindow):
         elif name == "Billing":
             from modules.billing import BillingPage
             page = BillingPage(self.user)
-        elif name == "Insurance":
-            from modules.insurance import InsurancePage
-            page = InsurancePage(self.user)
         else:
             page = QLabel(f"{name} — Module coming soon")
             page.setAlignment(Qt.AlignCenter)
