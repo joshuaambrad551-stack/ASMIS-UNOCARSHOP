@@ -30,9 +30,22 @@ from db.connection import get_connection
 from db.events import bus
 
 
+def ensure_billing_manpower_column():
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("ALTER TABLE billing ADD COLUMN IF NOT EXISTS manpower NUMERIC(10,2) DEFAULT 0")
+        cur.execute("UPDATE billing SET manpower = 0 WHERE manpower IS NULL")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
 class ServiceOrdersPage(QWidget):
     def __init__(self, user=None):
         super().__init__()
+        ensure_billing_manpower_column()
         self.user = user
         self.setStyleSheet(f"background: {PAGE_BG};")
         self._build_ui()
