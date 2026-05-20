@@ -20,7 +20,7 @@ def main():
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
-    app = QApplication(sys.argv)
+    app = QApplication(sys.argv)+
     app.setApplicationName("UnoCarshop ASMIS")
     app.setOrganizationName("UnoCarshop")
 

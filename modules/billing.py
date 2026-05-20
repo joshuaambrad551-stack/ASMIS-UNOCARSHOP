@@ -8,10 +8,14 @@ UnoCarshop ASMIS - Billing
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QDialog, QFormLayout, QDialogButtonBox, QTableWidgetItem,
-    QPushButton, QDoubleSpinBox, QDateEdit
+    QPushButton, QDoubleSpinBox, QDateEdit, QTextBrowser
 )
-from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtCore import Qt, QDate, QUrl
+from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 import sys, os
+from datetime import datetime
+from html import escape
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.widgets import (
@@ -33,6 +37,14 @@ def ensure_billing_manpower_column():
         conn.close()
     except Exception:
         pass
+
+
+def _money(value):
+    return f"PHP {float(value or 0):,.2f}"
+
+
+def _safe(value):
+    return escape(str(value or ""))
 
 
 class BillingPage(QWidget):
@@ -165,6 +177,12 @@ class BillingPage(QWidget):
                 al.setContentsMargins(4, 2, 4, 2)
                 al.setSpacing(4)
 
+                btn_r = QPushButton("Receipt")
+                btn_r.setFixedHeight(27)
+                btn_r.setCursor(Qt.PointingHandCursor)
+                btn_r.setStyleSheet("QPushButton{background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;border-radius:5px;font-size:11px;padding:0 8px;}QPushButton:hover{background:#d7f0da;}")
+                btn_r.clicked.connect(lambda _, b=bid: self._issue_receipt(b))
+
                 btn_e = QPushButton("Edit")
                 btn_e.setFixedHeight(27)
                 btn_e.setCursor(Qt.PointingHandCursor)
@@ -177,6 +195,7 @@ class BillingPage(QWidget):
                 btn_v.setStyleSheet("QPushButton{background:#ffebee;color:#c62828;border:1px solid #ef9a9a;border-radius:5px;font-size:11px;padding:0 8px;}QPushButton:hover{background:#ffcdd2;}")
                 btn_v.clicked.connect(lambda _, b=bid: self._void_bill(b))
 
+                al.addWidget(btn_r)
                 al.addWidget(btn_e)
                 al.addWidget(btn_v)
                 self.table.setCellWidget(r, 7, act)
@@ -201,13 +220,17 @@ class BillingPage(QWidget):
                     INSERT INTO billing
                         (bill_no,order_id,cust_id,subtotal,manpower,total,amount_paid,status,payment_method,bill_date)
                     VALUES (%s,%s,%s,%s,%s,%s,0,%s,%s,%s)
+                    RETURNING bill_id
                 """, (bill_no,) + data)
+                bill_id = cur.fetchone()[0]
                 conn.commit()
                 conn.close()
                 info(self, "Created", f"Invoice {bill_no} created.")
                 self.refresh()
                 bus.billing_changed.emit()
                 bus.dashboard_refresh.emit()
+                if data[5] == "Paid":
+                    self._issue_receipt(bill_id, require_paid=False)
             except Exception as e:
                 error(self, "Error", str(e))
 
@@ -244,6 +267,8 @@ class BillingPage(QWidget):
                 self.refresh()
                 bus.billing_changed.emit()
                 bus.dashboard_refresh.emit()
+                if data[5] == "Paid":
+                    self._issue_receipt(bill_id, require_paid=False)
             except Exception as e:
                 error(self, "Error", str(e))
 
@@ -261,8 +286,231 @@ class BillingPage(QWidget):
             except Exception as e:
                 error(self, "Error", str(e))
 
+    def _issue_receipt(self, bill_id, require_paid=True):
+        try:
+            receipt = self._build_receipt(bill_id)
+            if receipt["status"] == "Void":
+                error(self, "Receipt Unavailable", "Void invoices cannot be issued as receipts.")
+                return
+            if require_paid and receipt["status"] != "Paid":
+                if not confirm(self, "Issue Receipt", "This invoice is not marked as Paid. Issue a receipt anyway?"):
+                    return
+
+            receipt_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "receipts")
+            os.makedirs(receipt_dir, exist_ok=True)
+            file_name = f"receipt_{receipt['bill_no']}.html"
+            file_path = os.path.join(receipt_dir, file_name)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(receipt["html"])
+
+            dlg = ReceiptDialog(self, receipt["html"], file_path)
+            dlg.exec_()
+        except Exception as e:
+            error(self, "Receipt Error", str(e))
+
+    def _build_receipt(self, bill_id):
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT b.bill_no, b.subtotal, COALESCE(b.manpower,0), b.total,
+                   COALESCE(b.amount_paid,0), b.status, COALESCE(b.payment_method,''),
+                   b.bill_date, b.created_at, c.full_name, COALESCE(c.phone,''),
+                   COALESCE(c.email,''), COALESCE(c.address,''), COALESCE(so.order_no,'N/A'),
+                   COALESCE(v.plate_no,''), COALESCE(v.make,''), COALESCE(v.model,''), b.order_id
+            FROM billing b
+            JOIN customers c ON b.cust_id=c.cust_id
+            LEFT JOIN service_orders so ON b.order_id=so.order_id
+            LEFT JOIN vehicles v ON so.vehicle_id=v.vehicle_id
+            WHERE b.bill_id=%s
+        """, (bill_id,))
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            raise ValueError("Invoice was not found.")
+
+        order_id = row[17]
+        parts = []
+        if order_id:
+            cur.execute("""
+                SELECT i.item_name, sop.qty_used, sop.unit_price, sop.qty_used * sop.unit_price
+                FROM service_order_parts sop
+                JOIN inventory i ON sop.item_id=i.item_id
+                WHERE sop.order_id=%s
+                ORDER BY i.item_name
+            """, (order_id,))
+            parts = cur.fetchall()
+        conn.close()
+
+        cashier = self.user[1] if self.user and len(self.user) > 1 else "Cashier"
+        paid_amount = row[3] if row[5] == "Paid" else row[4]
+        balance = 0 if row[5] == "Paid" else max(float(row[3] or 0) - float(row[4] or 0), 0)
+        issued_at = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+        vehicle = " ".join([str(x) for x in row[14:17] if x]).strip() or "N/A"
+
+        line_rows = ""
+        if parts:
+            for name, qty, unit_price, line_total in parts:
+                line_rows += f"""
+                    <tr>
+                        <td>{_safe(name)}</td>
+                        <td class="num">{int(qty or 0)}</td>
+                        <td class="num">{_money(unit_price)}</td>
+                        <td class="num">{_money(line_total)}</td>
+                    </tr>
+                """
+        elif float(row[1] or 0) > 0:
+            line_rows = f"""
+                <tr>
+                    <td>Parts / Services</td>
+                    <td class="num">1</td>
+                    <td class="num">{_money(row[1])}</td>
+                    <td class="num">{_money(row[1])}</td>
+                </tr>
+            """
+        else:
+            line_rows = """
+                <tr>
+                    <td>No parts listed</td>
+                    <td class="num">0</td>
+                    <td class="num">PHP 0.00</td>
+                    <td class="num">PHP 0.00</td>
+                </tr>
+            """
+
+        html = f"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Receipt {_safe(row[0])}</title>
+<style>
+body {{ font-family: Arial, sans-serif; color: #101820; margin: 0; background: #f3f6fb; }}
+.receipt {{ width: 760px; margin: 24px auto; padding: 28px; background: #fff; border: 1px solid #d7dee8; }}
+.top {{ display: flex; justify-content: space-between; border-bottom: 2px solid #0b1f3a; padding-bottom: 14px; }}
+h1 {{ margin: 0; font-size: 26px; color: #0b1f3a; letter-spacing: 0; }}
+.muted {{ color: #687487; font-size: 12px; line-height: 1.5; }}
+.receipt-no {{ text-align: right; font-size: 13px; }}
+.paid {{ display: inline-block; margin-top: 8px; padding: 5px 10px; border: 1px solid #2e7d32; color: #2e7d32; font-weight: 700; }}
+.grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 20px 0; }}
+.box {{ border: 1px solid #d7dee8; padding: 12px; }}
+.label {{ color: #687487; font-size: 11px; text-transform: uppercase; margin-bottom: 5px; }}
+table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+th {{ text-align: left; color: #687487; font-size: 11px; border-bottom: 1px solid #d7dee8; padding: 8px; }}
+td {{ border-bottom: 1px solid #e8edf4; padding: 9px 8px; font-size: 13px; }}
+.num {{ text-align: right; }}
+.totals {{ margin-left: auto; width: 330px; margin-top: 18px; }}
+.totals td {{ border: none; padding: 5px 0; }}
+.grand td {{ font-size: 17px; font-weight: 700; border-top: 2px solid #0b1f3a; padding-top: 10px; }}
+.footer {{ margin-top: 28px; text-align: center; color: #687487; font-size: 12px; }}
+@media print {{ body {{ background: #fff; }} .receipt {{ width: auto; margin: 0; border: none; }} }}
+</style>
+</head>
+<body>
+<div class="receipt">
+    <div class="top">
+        <div>
+            <h1>UnoCarshop</h1>
+            <div class="muted">Auto Shop Management & Information System<br>Official Receipt</div>
+        </div>
+        <div class="receipt-no">
+            <strong>Receipt for Invoice {_safe(row[0])}</strong><br>
+            Bill Date: {_safe(row[7])}<br>
+            Issued: {_safe(issued_at)}<br>
+            <span class="paid">{_safe(row[5])}</span>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="box">
+            <div class="label">Received From</div>
+            <strong>{_safe(row[9])}</strong><br>
+            <span class="muted">{_safe(row[10])} {_safe(row[11])}<br>{_safe(row[12])}</span>
+        </div>
+        <div class="box">
+            <div class="label">Service Details</div>
+            Order No: <strong>{_safe(row[13])}</strong><br>
+            Vehicle: <strong>{_safe(vehicle)}</strong><br>
+            Payment: <strong>{_safe(row[6] or "N/A")}</strong>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr><th>Description</th><th class="num">Qty</th><th class="num">Unit Price</th><th class="num">Amount</th></tr>
+        </thead>
+        <tbody>
+            {line_rows}
+            <tr>
+                <td>Manpower / Labor</td>
+                <td class="num">1</td>
+                <td class="num">{_money(row[2])}</td>
+                <td class="num">{_money(row[2])}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <table class="totals">
+        <tr><td>Parts Subtotal</td><td class="num">{_money(row[1])}</td></tr>
+        <tr><td>Manpower</td><td class="num">{_money(row[2])}</td></tr>
+        <tr class="grand"><td>Total</td><td class="num">{_money(row[3])}</td></tr>
+        <tr><td>Amount Paid</td><td class="num">{_money(paid_amount)}</td></tr>
+        <tr><td>Balance</td><td class="num">{_money(balance)}</td></tr>
+    </table>
+
+    <div class="footer">
+        Issued by {_safe(cashier)}. Thank you for your business.
+    </div>
+</div>
+</body>
+</html>"""
+        return {"bill_no": row[0], "status": row[5], "html": html}
+
     def _cs(self):
         return f"QComboBox{{border:1px solid {BORDER};border-radius:8px;padding:0 10px;font-size:13px;color:{TEXT_DARK};background:white;}}QComboBox::drop-down{{border:none;width:20px;}}"
+
+
+class ReceiptDialog(QDialog):
+    def __init__(self, parent, html, file_path):
+        super().__init__(parent)
+        self.html = html
+        self.file_path = file_path
+        self.setWindowTitle("Receipt")
+        self.resize(860, 720)
+        self.setStyleSheet("QDialog{background:#f3f6fb;font-family:'Segoe UI';}")
+        self._build()
+
+    def _build(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        self.preview = QTextBrowser()
+        self.preview.setOpenExternalLinks(True)
+        self.preview.setHtml(self.html)
+        layout.addWidget(self.preview)
+
+        actions = QHBoxLayout()
+        path_lbl = QLabel(self.file_path)
+        path_lbl.setStyleSheet(f"color:{TEXT_SOFT};font-size:11px;")
+        actions.addWidget(path_lbl)
+        actions.addStretch()
+
+        btn_open = GhostButton("Open File")
+        btn_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self.file_path)))
+        btn_print = OrangeButton("Print")
+        btn_print.clicked.connect(self._print)
+        btn_close = GhostButton("Close")
+        btn_close.clicked.connect(self.accept)
+
+        actions.addWidget(btn_open)
+        actions.addWidget(btn_print)
+        actions.addWidget(btn_close)
+        layout.addLayout(actions)
+
+    def _print(self):
+        printer = QPrinter(QPrinter.HighResolution)
+        dlg = QPrintDialog(printer, self)
+        if dlg.exec_() == QDialog.Accepted:
+            self.preview.print_(printer)
 
 
 class BillingDialog(QDialog):
