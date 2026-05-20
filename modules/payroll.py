@@ -1,6 +1,6 @@
-"""
+﻿"""
 modules/payroll.py
-UnoCarshop ASMIS — Payroll Module (Integrated v2)
+UnoCarshop ASMIS - Payroll Module (Integrated v2)
 
 Key integrations:
 - Auto-loads ALL active employees
@@ -49,7 +49,7 @@ class PayrollPage(QWidget):
         self.setStyleSheet(f"background: {PAGE_BG};")
         self._periods = {}
         self._build_ui()
-        # Listen for attendance changes → auto refresh payroll
+        # Listen for attendance changes -> auto refresh payroll
         bus.attendance_changed.connect(self._on_attendance_changed)
         self.refresh()
 
@@ -64,10 +64,10 @@ class PayrollPage(QWidget):
 
         # Stats
         stats = QHBoxLayout(); stats.setSpacing(12)
-        self.s_total  = StatCard("Total Payroll",    "₱0", "💰", ORANGE)
-        self.s_paid   = StatCard("Paid",             "0",  "✅", GREEN)
-        self.s_draft  = StatCard("Draft",            "0",  "📝", BLUE)
-        self.s_emp    = StatCard("Regular Employees", "0",  "👥", "#9b59b6")
+        self.s_total  = StatCard("Total Payroll",    "PHP 0", "?", ORANGE)
+        self.s_paid   = StatCard("Paid",             "0",  "?", GREEN)
+        self.s_draft  = StatCard("Draft",            "0",  "?", BLUE)
+        self.s_emp    = StatCard("Regular Employees", "0",  "EMP", "#9b59b6")
         for s in [self.s_total, self.s_paid, self.s_draft, self.s_emp]:
             s.setFixedHeight(88); stats.addWidget(s)
         layout.addLayout(stats)
@@ -80,11 +80,11 @@ class PayrollPage(QWidget):
                 padding:8px 20px;font-size:13px;margin-right:4px;}
             QTabBar::tab:selected{background:#0b1f3a;color:white;font-weight:700;}
         """)
-        tabs.addTab(self._build_payroll_tab(),    "💰  Payroll Records")
-        tabs.addTab(self._build_attendance_tab(), "📊  Attendance Summary")
+        tabs.addTab(self._build_payroll_tab(),    "Payroll Records")
+        tabs.addTab(self._build_attendance_tab(), "Attendance Summary")
         layout.addWidget(tabs)
 
-    # ── TAB 1: Payroll Records ─────────────────────────────
+    # â”€â”€ TAB 1: Payroll Records â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def _build_payroll_tab(self):
         w = QWidget(); w.setStyleSheet("background:white;")
         layout = QVBoxLayout(w)
@@ -92,7 +92,7 @@ class PayrollPage(QWidget):
         layout.setSpacing(12)
 
         toolbar = QHBoxLayout()
-        self.search = SearchBar("Search employee…")
+        self.search = SearchBar("Search employee...")
         self.search.setFixedWidth(240)
         self.search.textChanged.connect(self._filter_payroll)
 
@@ -101,13 +101,13 @@ class PayrollPage(QWidget):
         self.period_combo.setStyleSheet(self._cs())
         self.period_combo.currentIndexChanged.connect(self._filter_payroll)
 
-        btn_gen     = OrangeButton("⚡  Generate Regular Payroll")
+        btn_gen     = OrangeButton("?  Generate Regular Payroll")
         btn_gen.clicked.connect(self._generate_from_attendance)
-        btn_add     = GhostButton("➕  Manual / Non-Regular Pay")
+        btn_add     = GhostButton("?  Manual / Non-Regular Pay")
         btn_add.clicked.connect(self._add_payroll)
-        btn_period  = GhostButton("📅  New Period")
+        btn_period  = GhostButton("New Period")
         btn_period.clicked.connect(self._add_period)
-        btn_refresh = GhostButton("🔄  Refresh")
+        btn_refresh = GhostButton("Refresh")
         btn_refresh.clicked.connect(self.refresh)
 
         toolbar.addWidget(self.search)
@@ -145,7 +145,7 @@ class PayrollPage(QWidget):
         layout.addWidget(self.count_lbl)
         return w
 
-    # ── TAB 2: Attendance Summary ──────────────────────────
+    # â”€â”€ TAB 2: Attendance Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def _build_attendance_tab(self):
         w = QWidget(); w.setStyleSheet("background:white;")
         layout = QVBoxLayout(w)
@@ -157,7 +157,7 @@ class PayrollPage(QWidget):
         self.att_period_combo.setFixedHeight(38); self.att_period_combo.setFixedWidth(220)
         self.att_period_combo.setStyleSheet(self._cs())
         self.att_period_combo.currentIndexChanged.connect(self._load_attendance_summary)
-        btn_ref2 = GhostButton("🔄 Refresh"); btn_ref2.clicked.connect(self._load_attendance_summary)
+        btn_ref2 = GhostButton("Refresh"); btn_ref2.clicked.connect(self._load_attendance_summary)
         toolbar2.addWidget(QLabel("Period:"))
         toolbar2.addWidget(self.att_period_combo)
         toolbar2.addStretch()
@@ -184,7 +184,7 @@ class PayrollPage(QWidget):
         layout.addWidget(self.att_table)
         return w
 
-    # ── Data loading ──────────────────────────────────────
+    # â”€â”€ Data loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def refresh(self):
         self._load_periods()
         self._load_payroll()
@@ -322,7 +322,7 @@ class PayrollPage(QWidget):
                 self.att_table.setRowHeight(r, 38)
                 for c, val in enumerate(rd):
                     item = QTableWidgetItem(
-                        f"₱{float(val):,.2f}" if c in (2, 8) else str(val) if val is not None else "0"
+                        f"PHP {float(val):,.2f}" if c in (2, 8) else str(val) if val is not None else "0"
                     )
                     item.setTextAlignment(
                         (Qt.AlignRight if c in (2,3,4,5,6,7,8) else Qt.AlignLeft) | Qt.AlignVCenter
@@ -343,7 +343,7 @@ class PayrollPage(QWidget):
             cur.execute("SELECT COUNT(*) FROM employees WHERE status='Active' AND COALESCE(classification,'Regular')='Regular'")
             emp = cur.fetchone()[0]
             conn.close()
-            self.s_total.set_value(f"₱{float(total):,.0f}")
+            self.s_total.set_value(f"PHP {float(total):,.0f}")
             self.s_paid.set_value(paid)
             self.s_draft.set_value(draft)
             self.s_emp.set_value(emp)
@@ -355,7 +355,7 @@ class PayrollPage(QWidget):
             period_name=self.period_combo.currentText()
         )
 
-    # ── Generate payroll from attendance ──────────────────
+    # â”€â”€ Generate payroll from attendance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def _generate_from_attendance(self):
         period_name = self.period_combo.currentText()
         if period_name == "All Periods":
@@ -421,7 +421,7 @@ class PayrollPage(QWidget):
         except Exception as e:
             error(self, "Generate Error", str(e))
 
-    # ── CRUD ──────────────────────────────────────────────
+    # â”€â”€ CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def _add_period(self):
         dlg = PeriodDialog(self)
         if dlg.exec_() == QDialog.Accepted:
@@ -511,12 +511,13 @@ class PeriodDialog(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
         self.setWindowTitle("New Payroll Period")
-        self.setFixedWidth(360)
+        self.resize(560, 400)
+        self.setMinimumSize(520, 360)
         self.setStyleSheet("QDialog{background:#f3f6fb;font-family:'Segoe UI';}"
                            "QLineEdit,QDateEdit{border:1px solid #d7dee8;border-radius:7px;"
                            "padding:6px 10px;font-size:13px;background:white;}")
-        layout = QVBoxLayout(self); layout.setContentsMargins(22,20,22,20)
-        form = QFormLayout(); form.setSpacing(10)
+        layout = QVBoxLayout(self); layout.setContentsMargins(28,24,28,24)
+        form = QFormLayout(); form.setSpacing(14)
         self.f_name  = QLineEdit()
         self.f_start = QDateEdit(QDate.currentDate()); self.f_start.setCalendarPopup(True)
         self.f_end   = QDateEdit(QDate.currentDate().addDays(14)); self.f_end.setCalendarPopup(True)
@@ -538,7 +539,8 @@ class PayrollDialog(QDialog):
         super().__init__(parent)
         self.periods = periods
         self.setWindowTitle("Payroll Record")
-        self.setFixedWidth(460)
+        self.resize(700, 620)
+        self.setMinimumSize(660, 580)
         self.setStyleSheet("""
             QDialog{background:#f3f6fb;font-family:'Segoe UI';}
             QComboBox,QDoubleSpinBox{border:1px solid #d7dee8;border-radius:7px;
@@ -548,7 +550,7 @@ class PayrollDialog(QDialog):
         self._employee_classes_by_id = {}
         try:
             conn = get_connection(); cur = conn.cursor()
-            cur.execute("SELECT emp_id, emp_code||' — '||full_name FROM employees WHERE status='Active' ORDER BY emp_code")
+            cur.execute("SELECT emp_id, emp_code||' - '||full_name FROM employees WHERE status='Active' ORDER BY emp_code")
             self._employees = {r[1]: r[0] for r in cur.fetchall()}; conn.close()
         except: pass
         try:
@@ -560,8 +562,8 @@ class PayrollDialog(QDialog):
         self._build(existing)
 
     def _build(self, ex):
-        layout = QVBoxLayout(self); layout.setContentsMargins(22,18,22,18)
-        form = QFormLayout(); form.setSpacing(10)
+        layout = QVBoxLayout(self); layout.setContentsMargins(28,22,28,22)
+        form = QFormLayout(); form.setSpacing(14)
 
         self.f_period = QComboBox(); self.f_period.addItems(list(self.periods.keys()))
         if ex and ex[0]:
@@ -576,7 +578,7 @@ class PayrollDialog(QDialog):
         self.f_category.setStyleSheet("font-weight:700;color:#0b1f3a;")
 
         def spin(v=0):
-            s = QDoubleSpinBox(); s.setMaximum(999999); s.setDecimals(2); s.setPrefix("₱ ")
+            s = QDoubleSpinBox(); s.setMaximum(999999); s.setDecimals(2); s.setPrefix("PHP  ")
             s.setValue(float(v) if v else 0); return s
 
         self.f_basic  = spin(ex[2] if ex else 0)
@@ -642,3 +644,4 @@ class PayrollDialog(QDialog):
             self.f_pagibig.value(),
             self.f_status.currentText()
         )
+

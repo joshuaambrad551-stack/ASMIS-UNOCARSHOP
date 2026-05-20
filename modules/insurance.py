@@ -1,6 +1,6 @@
-"""
+﻿"""
 modules/insurance.py
-UnoCarshop ASMIS — Insurance (Integrated v2)
+UnoCarshop ASMIS - Insurance (Integrated v2)
 Fires insurance_changed + dashboard_refresh on all CRUD
 """
 from PyQt5.QtWidgets import (
@@ -37,16 +37,16 @@ class InsurancePage(QWidget):
         layout.setSpacing(16)
 
         stats = QHBoxLayout(); stats.setSpacing(12)
-        self.s_active  = StatCard("Active Policies",  "0", "🛡️", GREEN)
-        self.s_expired = StatCard("Expired Policies", "0", "⚠",  RED)
-        self.s_expiring= StatCard("Expiring (30 days)","0","⏰", ORANGE)
-        self.s_total   = StatCard("Total Policies",   "0", "📋", BLUE)
+        self.s_active  = StatCard("Active Policies",  "0", "?", GREEN)
+        self.s_expired = StatCard("Expired Policies", "0", "?",  RED)
+        self.s_expiring= StatCard("Expiring (30 days)","0","?", ORANGE)
+        self.s_total   = StatCard("Total Policies",   "0", "?", BLUE)
         for s in [self.s_active, self.s_expired, self.s_expiring, self.s_total]:
             s.setFixedHeight(88); stats.addWidget(s)
         layout.addLayout(stats)
 
         toolbar = QHBoxLayout()
-        self.search = SearchBar("Search policy #, provider, customer…")
+        self.search = SearchBar("Search policy #, provider, customer...")
         self.search.setFixedWidth(300)
         self.search.textChanged.connect(self._filter)
 
@@ -56,8 +56,8 @@ class InsurancePage(QWidget):
         self.status_filter.setStyleSheet(self._cs())
         self.status_filter.currentIndexChanged.connect(self._filter)
 
-        btn_add = OrangeButton("➕  Add Policy"); btn_add.clicked.connect(self._add_policy)
-        btn_ref = GhostButton("🔄  Refresh");    btn_ref.clicked.connect(self.refresh)
+        btn_add = OrangeButton("?  Add Policy"); btn_add.clicked.connect(self._add_policy)
+        btn_ref = GhostButton("Refresh");    btn_ref.clicked.connect(self.refresh)
 
         toolbar.addWidget(self.search); toolbar.addWidget(self.status_filter)
         toolbar.addStretch(); toolbar.addWidget(btn_ref); toolbar.addWidget(btn_add)
@@ -125,7 +125,7 @@ class InsurancePage(QWidget):
                 data = [rd[1], rd[2], rd[3], rd[4], rd[5],
                         str(rd[6]) if rd[6] else "",
                         str(rd[7]) if rd[7] else "",
-                        f"₱{float(rd[8]):,.2f}"]
+                        f"PHP {float(rd[8]):,.2f}"]
                 for c, val in enumerate(data):
                     item = QTableWidgetItem(str(val))
                     item.setTextAlignment(
@@ -268,7 +268,7 @@ class InsuranceDialog(QDialog):
         )
 
         self.f_prem = QDoubleSpinBox()
-        self.f_prem.setMaximum(9999999); self.f_prem.setDecimals(2); self.f_prem.setPrefix("₱ ")
+        self.f_prem.setMaximum(9999999); self.f_prem.setDecimals(2); self.f_prem.setPrefix("PHP  ")
         self.f_prem.setValue(float(ex[7]) if ex and ex[7] else 0)
 
         self.f_status = QComboBox()
@@ -335,3 +335,4 @@ class InsuranceDialog(QDialog):
             self.f_prem.value(),
             self.f_status.currentText()
         )
+

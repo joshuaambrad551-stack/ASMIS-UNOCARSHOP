@@ -1,6 +1,6 @@
-"""
+﻿"""
 modules/dashboard.py
-UnoCarshop ASMIS — Dashboard (Integrated v2)
+UnoCarshop ASMIS - Dashboard (Integrated v2)
 
 Key integrations:
 - Subscribes to ALL module events via EventBus
@@ -35,7 +35,7 @@ class DashboardPage(QWidget):
         self.setStyleSheet(f"background: {PAGE_BG};")
         self._build_ui()
 
-        # ── Subscribe to ALL module events ─────────────────
+        # â”€â”€ Subscribe to ALL module events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         bus.customers_changed.connect(self.refresh)
         bus.vehicles_changed.connect(self.refresh)
         bus.employees_changed.connect(self.refresh)
@@ -46,7 +46,7 @@ class DashboardPage(QWidget):
         bus.billing_changed.connect(self.refresh)
         bus.dashboard_refresh.connect(self.refresh)
 
-        # ── Auto-refresh every 60 seconds ──────────────────
+        # â”€â”€ Auto-refresh every 60 seconds â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         self._timer = QTimer(self)
         self._timer.setInterval(60000)
         self._timer.timeout.connect(self.refresh)
@@ -65,21 +65,21 @@ class DashboardPage(QWidget):
         self.main_layout.setContentsMargins(28, 24, 28, 24)
         self.main_layout.setSpacing(20)
 
-        # ── Row 1: KPI Cards ───────────────────────────────
+        # â”€â”€ Row 1: KPI Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         kpi = QGridLayout(); kpi.setSpacing(14)
 
-        self.kpi_customers   = StatCard("Total Customers",   "—", "👤", ORANGE)
-        self.kpi_vehicles    = StatCard("Total Vehicles",    "—", "🚗", "#1abc9c")
-        self.kpi_employees   = StatCard("Active Employees",  "—", "👥", BLUE)
-        self.kpi_orders      = StatCard("Active Orders",     "—", "🔧", "#c1121f")
-        self.kpi_completed   = StatCard("Completed Today",   "—", "✅", GREEN)
-        self.kpi_revenue_day = StatCard("Today's Revenue",   "—", "💵", GREEN)
-        self.kpi_revenue_mon = StatCard("Monthly Revenue",   "—", "💰", "#9b59b6")
-        self.kpi_low_stock   = StatCard("Out of Stock",      "—", "⚠",  RED)
-        self.kpi_appts       = StatCard("Appts Today",       "—", "📅", "#16a085")
-        self.kpi_unpaid      = StatCard("Unpaid Invoices",   "—", "🧾", RED)
-        self.kpi_present     = StatCard("Present Today",     "—", "🟢", GREEN)
-        self.kpi_receivables = StatCard("Total Billed", "—", "💳", "#8e44ad")
+        self.kpi_customers   = StatCard("Total Customers",   "-", "?", ORANGE)
+        self.kpi_vehicles    = StatCard("Total Vehicles",    "-", "?", "#1abc9c")
+        self.kpi_employees   = StatCard("Active Employees",  "-", "EMP", BLUE)
+        self.kpi_orders      = StatCard("Active Orders",     "-", "?", "#c1121f")
+        self.kpi_completed   = StatCard("Completed Today",   "-", "?", GREEN)
+        self.kpi_revenue_day = StatCard("Today's Revenue",   "-", "?", GREEN)
+        self.kpi_revenue_mon = StatCard("Monthly Revenue",   "-", "?", "#9b59b6")
+        self.kpi_low_stock   = StatCard("Out of Stock",      "-", "?",  RED)
+        self.kpi_appts       = StatCard("Appts Today",       "-", "APT", "#16a085")
+        self.kpi_unpaid      = StatCard("Unpaid Invoices",   "-", "?", RED)
+        self.kpi_present     = StatCard("Present Today",     "-", "?", GREEN)
+        self.kpi_receivables = StatCard("Total Billed", "-", "?", "#8e44ad")
 
         cards = [
             self.kpi_customers, self.kpi_vehicles, self.kpi_employees, self.kpi_orders,
@@ -91,13 +91,13 @@ class DashboardPage(QWidget):
             kpi.addWidget(c, i // 4, i % 4)
         self.main_layout.addLayout(kpi)
 
-        # ── Row 2: Recent Orders + Out of Stock + Attendance ──
+        # â”€â”€ Row 2: Recent Orders + Out of Stock + Attendance â”€â”€
         row2 = QHBoxLayout(); row2.setSpacing(16)
 
         # Recent orders
         orders_card = Card()
         ol = QVBoxLayout(orders_card); ol.setContentsMargins(16,16,16,16); ol.setSpacing(10)
-        hdr1 = QLabel("🔧  Recent Service Orders")
+        hdr1 = QLabel("Recent Service Orders")
         hdr1.setStyleSheet(f"font-size:14px;font-weight:700;color:{TEXT_DARK};border:none;")
         ol.addWidget(hdr1)
         self.orders_table = StyledTable(["Order #","Customer","Vehicle","Service","Status"])
@@ -108,7 +108,7 @@ class DashboardPage(QWidget):
         # Attendance summary
         att_card = Card(); att_card.setFixedWidth(240)
         al = QVBoxLayout(att_card); al.setContentsMargins(16,16,16,16); al.setSpacing(8)
-        hdr2 = QLabel("📋  Today's Attendance")
+        hdr2 = QLabel("Today's Attendance")
         hdr2.setStyleSheet(f"font-size:14px;font-weight:700;color:{TEXT_DARK};border:none;")
         al.addWidget(hdr2)
         self.att_bars = {}
@@ -120,7 +120,7 @@ class DashboardPage(QWidget):
             ("Half Day", "#9b59b6"),
         ]:
             row_ = QHBoxLayout()
-            dot = QLabel("●"); dot.setStyleSheet(f"color:{color};border:none;font-size:14px;")
+            dot = QLabel("?"); dot.setStyleSheet(f"color:{color};border:none;font-size:14px;")
             lbl = QLabel(label); lbl.setStyleSheet(f"color:{TEXT_MID};font-size:13px;border:none;")
             val = QLabel("0"); val.setStyleSheet(
                 f"color:{TEXT_DARK};font-size:15px;font-weight:700;border:none;"
@@ -134,7 +134,7 @@ class DashboardPage(QWidget):
         # Out of stock
         low_card = Card(); low_card.setFixedWidth(260)
         ll = QVBoxLayout(low_card); ll.setContentsMargins(16,16,16,16); ll.setSpacing(10)
-        hdr3 = QLabel("⚠  Out of Stock")
+        hdr3 = QLabel("?  Out of Stock")
         hdr3.setStyleSheet(f"font-size:14px;font-weight:700;color:{TEXT_DARK};border:none;")
         ll.addWidget(hdr3)
         self.low_table = StyledTable(["Item","Qty"])
@@ -147,12 +147,12 @@ class DashboardPage(QWidget):
         row2.addWidget(low_card)
         self.main_layout.addLayout(row2)
 
-        # ── Row 3: Recent Billing + Appointments ───────────
+        # â”€â”€ Row 3: Recent Billing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         row3 = QHBoxLayout(); row3.setSpacing(16)
 
         bill_card = Card()
         bl = QVBoxLayout(bill_card); bl.setContentsMargins(16,16,16,16); bl.setSpacing(10)
-        hdr4 = QLabel("🧾  Recent Transactions")
+        hdr4 = QLabel("Recent Transactions")
         hdr4.setStyleSheet(f"font-size:14px;font-weight:700;color:{TEXT_DARK};border:none;")
         bl.addWidget(hdr4)
         self.bill_table = StyledTable(["Bill #","Customer","Subtotal","Manpower","Total","Status"])
@@ -160,18 +160,7 @@ class DashboardPage(QWidget):
         self.bill_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         bl.addWidget(self.bill_table)
 
-        appt_card = Card()
-        apt_l = QVBoxLayout(appt_card); apt_l.setContentsMargins(16,16,16,16); apt_l.setSpacing(10)
-        hdr5 = QLabel("📅  Today's Appointments")
-        hdr5.setStyleSheet(f"font-size:14px;font-weight:700;color:{TEXT_DARK};border:none;")
-        apt_l.addWidget(hdr5)
-        self.appt_table = StyledTable(["Customer","Vehicle","Service","Time","Status"])
-        self.appt_table.setFixedHeight(200)
-        self.appt_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        apt_l.addWidget(self.appt_table)
-
         row3.addWidget(bill_card, 1)
-        row3.addWidget(appt_card, 1)
         self.main_layout.addLayout(row3)
         self.main_layout.addStretch()
 
@@ -180,14 +169,13 @@ class DashboardPage(QWidget):
         outer.setContentsMargins(0,0,0,0)
         outer.addWidget(scroll)
 
-    # ── Live data refresh ─────────────────────────────────
+    # â”€â”€ Live data refresh â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def refresh(self):
         self._load_kpis()
         self._load_recent_orders()
         self._load_attendance_bars()
         self._load_low_stock()
         self._load_recent_billing()
-        self._load_appointments()
 
     def _load_kpis(self):
         try:
@@ -214,13 +202,13 @@ class DashboardPage(QWidget):
                     self.kpi_employees.set_value(active_emp)
                     self.kpi_orders.set_value(active_orders)
                     self.kpi_completed.set_value(completed_today)
-                    self.kpi_revenue_day.set_value(f"₱{float(daily_rev):,.0f}")
-                    self.kpi_revenue_mon.set_value(f"₱{float(monthly_rev):,.0f}")
+                    self.kpi_revenue_day.set_value(f"PHP {float(daily_rev):,.0f}")
+                    self.kpi_revenue_mon.set_value(f"PHP {float(monthly_rev):,.0f}")
                     self.kpi_low_stock.set_value(low_stock)
                     self.kpi_appts.set_value(appts_today)
                     self.kpi_unpaid.set_value(unpaid_inv)
                     self.kpi_present.set_value(present_today)
-                    self.kpi_receivables.set_value(f"₱{float(total_recv):,.0f}")
+                    self.kpi_receivables.set_value(f"PHP {float(total_recv):,.0f}")
                     conn.close(); return
             # Fallback: individual queries
             cur.execute("SELECT COUNT(*) FROM customers")
@@ -234,12 +222,12 @@ class DashboardPage(QWidget):
             cur.execute("SELECT COUNT(*) FROM service_orders WHERE status='Completed' AND date_out=CURRENT_DATE")
             self.kpi_completed.set_value(cur.fetchone()[0])
             cur.execute("SELECT COALESCE(SUM(total),0) FROM billing WHERE bill_date=CURRENT_DATE AND status!='Void'")
-            self.kpi_revenue_day.set_value(f"₱{float(cur.fetchone()[0]):,.0f}")
+            self.kpi_revenue_day.set_value(f"PHP {float(cur.fetchone()[0]):,.0f}")
             cur.execute("""SELECT COALESCE(SUM(total),0) FROM billing
                 WHERE EXTRACT(MONTH FROM bill_date)=EXTRACT(MONTH FROM CURRENT_DATE)
                 AND EXTRACT(YEAR FROM bill_date)=EXTRACT(YEAR FROM CURRENT_DATE)
                 AND status!='Void'""")
-            self.kpi_revenue_mon.set_value(f"₱{float(cur.fetchone()[0]):,.0f}")
+            self.kpi_revenue_mon.set_value(f"PHP {float(cur.fetchone()[0]):,.0f}")
             cur.execute("SELECT COUNT(*) FROM inventory WHERE quantity<=0 AND status='Active'")
             self.kpi_low_stock.set_value(cur.fetchone()[0])
             cur.execute("SELECT COUNT(*) FROM billing WHERE status='Unpaid'")
@@ -247,8 +235,8 @@ class DashboardPage(QWidget):
             cur.execute("SELECT COUNT(*) FROM attendance WHERE attend_date=CURRENT_DATE AND status='Present'")
             self.kpi_present.set_value(cur.fetchone()[0])
             cur.execute("SELECT COALESCE(SUM(total),0) FROM billing WHERE status!='Void'")
-            self.kpi_receivables.set_value(f"₱{float(cur.fetchone()[0]):,.0f}")
-            self.kpi_appts.set_value("—")
+            self.kpi_receivables.set_value(f"PHP {float(cur.fetchone()[0]):,.0f}")
+            self.kpi_appts.set_value("-")
             conn.close()
         except Exception as e:
             print(f"Dashboard KPI error: {e}")
@@ -346,42 +334,4 @@ class DashboardPage(QWidget):
         except Exception as e:
             print(f"Billing load error: {e}")
 
-    def _load_appointments(self):
-        try:
-            conn = get_connection(); cur = conn.cursor()
-            # Check if appointments table exists
-            cur.execute("""
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.tables
-                    WHERE table_name='appointments'
-                )
-            """)
-            if not cur.fetchone()[0]:
-                conn.close()
-                return
-            cur.execute("""
-                SELECT c.full_name,
-                       v.plate_no||' '||COALESCE(v.make,''),
-                       COALESCE(st.type_name,'—'),
-                       COALESCE(CAST(a.appt_time AS TEXT),'—'),
-                       a.status
-                FROM appointments a
-                JOIN customers c ON a.cust_id=c.cust_id
-                LEFT JOIN vehicles v ON a.vehicle_id=v.vehicle_id
-                LEFT JOIN service_types st ON a.svc_type_id=st.svc_type_id
-                WHERE a.appt_date=CURRENT_DATE
-                ORDER BY a.appt_time
-            """)
-            rows = cur.fetchall(); conn.close()
-            self.appt_table.setRowCount(0)
-            for rd in rows:
-                r = self.appt_table.rowCount()
-                self.appt_table.insertRow(r)
-                self.appt_table.setRowHeight(r, 34)
-                for c, val in enumerate(rd[:-1]):
-                    item = QTableWidgetItem(str(val) if val else "")
-                    item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-                    self.appt_table.setItem(r, c, item)
-                self.appt_table.setItem(r, 4, status_item(rd[4]))
-        except Exception as e:
-            print(f"Appointments load error: {e}")
+

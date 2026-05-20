@@ -1,6 +1,6 @@
-"""
+﻿"""
 modules/employees.py
-UnoCarshop ASMIS — Employees (Integrated v2)
+UnoCarshop ASMIS - Employees (Integrated v2)
 Fires employees_changed + dashboard_refresh on all CRUD
 """
 from PyQt5.QtWidgets import (
@@ -43,7 +43,7 @@ class EmployeesPage(QWidget):
         layout.setSpacing(16)
 
         toolbar = QHBoxLayout()
-        self.search = SearchBar("Search by name, code, department…")
+        self.search = SearchBar("Search by name, code, department...")
         self.search.setFixedWidth(320)
         self.search.textChanged.connect(self._filter)
 
@@ -58,8 +58,8 @@ class EmployeesPage(QWidget):
         self.filter_status.setStyleSheet(self._combo_style())
         self.filter_status.currentIndexChanged.connect(self._filter)
 
-        btn_add     = OrangeButton("➕  Add Employee"); btn_add.clicked.connect(self._add_employee)
-        btn_refresh = GhostButton("🔄  Refresh");      btn_refresh.clicked.connect(self.refresh)
+        btn_add     = OrangeButton("?  Add Employee"); btn_add.clicked.connect(self._add_employee)
+        btn_refresh = GhostButton("Refresh");      btn_refresh.clicked.connect(self.refresh)
 
         toolbar.addWidget(self.search)
         toolbar.addWidget(self.filter_dept)
@@ -115,8 +115,8 @@ class EmployeesPage(QWidget):
                 SELECT e.emp_id, e.emp_code, e.full_name,
                        COALESCE(e.classification,'Regular'),
                        COALESCE(e.pay_schedule,'Weekly'),
-                       COALESCE(d.dept_name,'—'), COALESCE(p.position_name,'—'),
-                       e.hire_date, COALESCE(e.gender,'—'), COALESCE(e.phone,'—'), e.status
+                       COALESCE(d.dept_name,'-'), COALESCE(p.position_name,'-'),
+                       e.hire_date, COALESCE(e.gender,'-'), COALESCE(e.phone,'-'), e.status
                 FROM employees e
                 LEFT JOIN departments d ON e.dept_id=d.dept_id
                 LEFT JOIN positions p ON e.position_id=p.position_id
@@ -234,7 +234,8 @@ class EmployeeDialog(QDialog):
         super().__init__(parent)
         self.depts = depts; self.positions = positions
         self.setWindowTitle("Add Employee" if not existing else "Edit Employee")
-        self.setFixedWidth(500)
+        self.resize(760, 700)
+        self.setMinimumSize(700, 640)
         self.setStyleSheet("""
             QDialog{background:#f3f6fb;font-family:'Segoe UI';}
             QLineEdit,QComboBox,QDateEdit,QTextEdit{border:1px solid #d7dee8;
@@ -243,8 +244,8 @@ class EmployeeDialog(QDialog):
         self._build(existing)
 
     def _build(self, ex):
-        layout = QVBoxLayout(self); layout.setContentsMargins(24,20,24,20); layout.setSpacing(14)
-        form = QFormLayout(); form.setSpacing(10); form.setLabelAlignment(Qt.AlignRight|Qt.AlignVCenter)
+        layout = QVBoxLayout(self); layout.setContentsMargins(30,24,30,24); layout.setSpacing(18)
+        form = QFormLayout(); form.setSpacing(14); form.setLabelAlignment(Qt.AlignRight|Qt.AlignVCenter)
 
         self.f_code  = QLineEdit(ex[0] if ex else "")
         self.f_first = QLineEdit(ex[1] if ex else "")
@@ -268,7 +269,7 @@ class EmployeeDialog(QDialog):
         if ex and ex[7]: self.f_gender.setCurrentText(ex[7])
         self.f_phone = QLineEdit(ex[8] if ex and ex[8] else "")
         self.f_email = QLineEdit(ex[9] if ex and ex[9] else "")
-        self.f_addr  = QTextEdit(ex[10] if ex and ex[10] else ""); self.f_addr.setFixedHeight(60)
+        self.f_addr  = QTextEdit(ex[10] if ex and ex[10] else ""); self.f_addr.setFixedHeight(90)
         self.f_class = QComboBox(); self.f_class.addItems(["Regular","Non-Regular"])
         if ex and ex[11]: self.f_class.setCurrentText(employee_category(ex[11]))
         self.f_schedule = QComboBox(); self.f_schedule.addItems(["Weekly","Semi-Monthly"])
@@ -316,3 +317,4 @@ class EmployeeDialog(QDialog):
             self.f_schedule.currentText(),
             self.f_status.currentText()
         )
+

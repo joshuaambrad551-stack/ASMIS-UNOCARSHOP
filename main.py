@@ -20,13 +20,23 @@ def main():
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
-    app = QApplication(sys.argv)+
+    app = QApplication(sys.argv)
     app.setApplicationName("UnoCarshop ASMIS")
     app.setOrganizationName("UnoCarshop")
 
-    # Global font
-    font = QFont("Segoe UI", 10)
+    # Global font scaling
+    font = QFont("Segoe UI", 11)
     app.setFont(font)
+    app.setStyleSheet("""
+        QLabel { font-size: 14px; }
+        QPushButton { font-size: 14px; min-height: 40px; }
+        QLineEdit, QComboBox, QDateEdit, QTimeEdit, QTextEdit, QSpinBox, QDoubleSpinBox {
+            font-size: 14px;
+            min-height: 38px;
+        }
+        QTableWidget { font-size: 14px; }
+        QHeaderView::section { font-size: 12px; }
+    """)
 
     window = LoginWindow()
     window.show()
@@ -35,4 +45,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-adm
+

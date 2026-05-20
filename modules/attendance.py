@@ -1,6 +1,6 @@
-"""
+﻿"""
 modules/attendance.py
-UnoCarshop ASMIS — Attendance Module (Integrated v2)
+UnoCarshop ASMIS - Attendance Module (Integrated v2)
 
 Key integrations:
 - Auto-loads ALL active employees when page opens
@@ -50,11 +50,11 @@ class AttendancePage(QWidget):
         # Summary cards
         stats_row = QHBoxLayout()
         stats_row.setSpacing(12)
-        self.s_present = StatCard("Present Today",  "0", "✅", GREEN)
-        self.s_absent  = StatCard("Absent Today",   "0", "❌", RED)
-        self.s_late    = StatCard("Late Today",     "0", "⏰", ORANGE)
-        self.s_onleave = StatCard("On Leave Today", "0", "🏖", BLUE)
-        self.s_halfday = StatCard("Half Day Today", "0", "⏱", "#9b59b6")
+        self.s_present = StatCard("Present Today",  "0", "?", GREEN)
+        self.s_absent  = StatCard("Absent Today",   "0", "?", RED)
+        self.s_late    = StatCard("Late Today",     "0", "?", ORANGE)
+        self.s_onleave = StatCard("On Leave Today", "0", "?", BLUE)
+        self.s_halfday = StatCard("Half Day Today", "0", "?", "#9b59b6")
         for s in [self.s_present, self.s_absent, self.s_late, self.s_onleave, self.s_halfday]:
             s.setFixedHeight(88)
             stats_row.addWidget(s)
@@ -72,7 +72,7 @@ class AttendancePage(QWidget):
         self.date_filter.setStyleSheet(self._cs())
         self.date_filter.dateChanged.connect(self.refresh)
 
-        self.search = SearchBar("Search employee…")
+        self.search = SearchBar("Search employee...")
         self.search.setFixedWidth(220)
         self.search.textChanged.connect(self._filter_table)
 
@@ -82,11 +82,11 @@ class AttendancePage(QWidget):
         self.dept_filter.setStyleSheet(self._cs())
         self.dept_filter.currentIndexChanged.connect(self._filter_table)
 
-        btn_save    = OrangeButton("💾  Save All")
+        btn_save    = OrangeButton("Save All")
         btn_save.clicked.connect(self._save_all)
-        btn_refresh = GhostButton("🔄  Refresh")
+        btn_refresh = GhostButton("Refresh")
         btn_refresh.clicked.connect(self.refresh)
-        btn_manual  = GhostButton("➕  Manual Entry")
+        btn_manual  = GhostButton("?  Manual Entry")
         btn_manual.clicked.connect(self._manual_record)
 
         toolbar.addWidget(lbl_date)
@@ -142,7 +142,7 @@ class AttendancePage(QWidget):
         self.table.setSortingEnabled(False)
         layout.addWidget(self.table)
 
-    # ── Data loading ──────────────────────────────────────
+    # â”€â”€ Data loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def refresh(self):
         self._inline_combos.clear()
         self._emp_rows.clear()
@@ -169,7 +169,7 @@ class AttendancePage(QWidget):
             conn = get_connection(); cur = conn.cursor()
             cur.execute("""
                 SELECT e.emp_id, e.emp_code, e.full_name,
-                       COALESCE(d.dept_name,'—'), COALESCE(p.position_name,'—'),
+                       COALESCE(d.dept_name,'-'), COALESCE(p.position_name,'-'),
                        a.attend_id, COALESCE(a.status,'Present'),
                        a.time_in, a.time_out
                 FROM employees e
@@ -278,7 +278,7 @@ class AttendancePage(QWidget):
             ok_dept   = dept == "All Departments" or d == dept
             self.table.setRowHidden(row, not (ok_search and ok_dept))
 
-    # ── Save logic ────────────────────────────────────────
+    # â”€â”€ Save logic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def _save_one(self, emp_id):
         date_str = self.date_filter.date().toString("yyyy-MM-dd")
         combo    = self._inline_combos.get(emp_id)
@@ -405,7 +405,8 @@ class AttendanceDialog(QDialog):
     def __init__(self, parent, existing=None):
         super().__init__(parent)
         self.setWindowTitle("Manual Attendance Record")
-        self.setFixedWidth(420)
+        self.resize(620, 440)
+        self.setMinimumSize(580, 420)
         self.setStyleSheet("""
             QDialog{background:#f3f6fb;font-family:'Segoe UI';}
             QLineEdit,QComboBox,QDateEdit,QTimeEdit,QTextEdit{
@@ -420,7 +421,7 @@ class AttendanceDialog(QDialog):
         try:
             conn = get_connection(); cur = conn.cursor()
             cur.execute(
-                "SELECT emp_id, emp_code||' — '||full_name FROM employees "
+                "SELECT emp_id, emp_code||' - '||full_name FROM employees "
                 "WHERE status='Active' ORDER BY emp_code"
             )
             self._employees = {r[1]: r[0] for r in cur.fetchall()}
@@ -429,10 +430,10 @@ class AttendanceDialog(QDialog):
 
     def _build(self, ex):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 20, 22, 20)
-        layout.setSpacing(12)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(16)
         form = QFormLayout()
-        form.setSpacing(10)
+        form.setSpacing(14)
         form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.f_emp = QComboBox()
@@ -484,3 +485,4 @@ class AttendanceDialog(QDialog):
             self.f_out.time().toString("HH:mm"),
             "Late" if self.f_status.currentText() == "Present" and self.f_in.time() > QTime(8, 0) else self.f_status.currentText(),
         )
+

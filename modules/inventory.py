@@ -1,6 +1,6 @@
-"""
+﻿"""
 modules/inventory.py
-UnoCarshop ASMIS — Inventory (Integrated v2)
+UnoCarshop ASMIS - Inventory (Integrated v2)
 
 Key changes:
 - Removed Consumables and Suspension categories
@@ -46,16 +46,16 @@ class InventoryPage(QWidget):
         layout.setSpacing(16)
 
         stats = QHBoxLayout(); stats.setSpacing(12)
-        self.s_total = StatCard("Total Items",  "0",  "📦", ORANGE)
-        self.s_low   = StatCard("Out of Stock", "0",  "⚠",  RED)
-        self.s_value = StatCard("Stock Value",  "₱0", "💰", GREEN)
-        self.s_cats  = StatCard("Categories",   "0",  "🏷",  BLUE)
+        self.s_total = StatCard("Total Items",  "0",  "?", ORANGE)
+        self.s_low   = StatCard("Out of Stock", "0",  "?",  RED)
+        self.s_value = StatCard("Stock Value",  "PHP 0", "?", GREEN)
+        self.s_cats  = StatCard("Categories",   "0",  "?",  BLUE)
         for s in [self.s_total, self.s_low, self.s_value, self.s_cats]:
             s.setFixedHeight(88); stats.addWidget(s)
         layout.addLayout(stats)
 
         toolbar = QHBoxLayout()
-        self.search = SearchBar("Search by name, code, supplier…")
+        self.search = SearchBar("Search by name, code, supplier...")
         self.search.setFixedWidth(280)
         self.search.textChanged.connect(self._filter)
 
@@ -65,14 +65,14 @@ class InventoryPage(QWidget):
         self.cat_filter.currentIndexChanged.connect(self._filter)
 
         self.stock_filter = QComboBox()
-        self.stock_filter.addItems(["All Stock","⚠ Out of Stock","✅ In Stock"])
+        self.stock_filter.addItems(["All Stock","? Out of Stock","? In Stock"])
         self.stock_filter.setFixedHeight(38); self.stock_filter.setFixedWidth(140)
         self.stock_filter.setStyleSheet(self._cs())
         self.stock_filter.currentIndexChanged.connect(self._filter)
 
-        btn_add     = OrangeButton("➕  Add Item")
+        btn_add     = OrangeButton("?  Add Item")
         btn_add.clicked.connect(self._add_item)
-        btn_refresh = GhostButton("🔄  Refresh")
+        btn_refresh = GhostButton("Refresh")
         btn_refresh.clicked.connect(self.refresh)
 
         toolbar.addWidget(self.search)
@@ -127,7 +127,7 @@ class InventoryPage(QWidget):
             conn = get_connection(); cur = conn.cursor()
             q = """
                 SELECT i.item_id, i.item_code, i.item_name,
-                       COALESCE(c.cat_name,'—'), i.unit,
+                       COALESCE(c.cat_name,'-'), i.unit,
                        i.quantity, i.unit_cost, i.unit_price, COALESCE(i.supplier,'')
                 FROM inventory i
                 LEFT JOIN inventory_categories c ON i.cat_id=c.cat_id
@@ -158,7 +158,7 @@ class InventoryPage(QWidget):
 
             self.s_total.set_value(total)
             self.s_low.set_value(low)
-            self.s_value.set_value(f"₱{float(val):,.0f}")
+            self.s_value.set_value(f"PHP {float(val):,.0f}")
             self.s_cats.set_value(cats)
 
             self.table.setRowCount(0)
@@ -170,8 +170,8 @@ class InventoryPage(QWidget):
                 low_flag = rd[5] <= 0
                 data = [rd[1], rd[2], rd[3], rd[4],
                         rd[5],
-                        f"₱{float(rd[6]):,.2f}",
-                        f"₱{float(rd[7]):,.2f}",
+                        f"PHP {float(rd[6]):,.2f}",
+                        f"PHP {float(rd[7]):,.2f}",
                         rd[8]]
                 for c, val_ in enumerate(data):
                     item = QTableWidgetItem(str(val_))
@@ -212,17 +212,13 @@ class InventoryPage(QWidget):
             data = dlg.get_data()
             try:
                 conn = get_connection(); cur = conn.cursor()
-                cur.execute("SELECT 1 FROM inventory WHERE item_code=%s", (data[0],))
-                if cur.fetchone():
-                    conn.close()
-                    error(self, "Duplicate Code", f"Item code '{data[0]}' already exists. Use a different code or edit the existing item.")
-                    return
+                item_code = self._next_item_code(cur)
                 cur.execute("""
                     INSERT INTO inventory
                     (item_code,item_name,cat_id,unit,quantity,
                      unit_cost,unit_price,supplier,location)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                """, data)
+                """, (item_code,) + data[1:])
                 conn.commit(); conn.close()
                 info(self, "Saved", "Item added to inventory.")
                 self.refresh()
@@ -272,13 +268,30 @@ class InventoryPage(QWidget):
     def _cs(self):
         return f"QComboBox{{border:1px solid {BORDER};border-radius:8px;padding:0 10px;font-size:13px;color:{TEXT_DARK};background:white;}}QComboBox::drop-down{{border:none;width:20px;}}"
 
+    def _next_item_code(self, cur):
+        cur.execute("""
+            SELECT COALESCE(
+                MAX(NULLIF(regexp_replace(item_code, '\\D', '', 'g'), '')::INT),
+                0
+            ) + 1
+            FROM inventory
+        """)
+        next_num = cur.fetchone()[0]
+        while True:
+            code = f"ITM{int(next_num):05d}"
+            cur.execute("SELECT 1 FROM inventory WHERE item_code=%s", (code,))
+            if not cur.fetchone():
+                return code
+            next_num += 1
+
 
 class InventoryDialog(QDialog):
     def __init__(self, parent, categories, existing=None):
         super().__init__(parent)
         self.categories = categories
         self.setWindowTitle("Inventory Item")
-        self.setFixedWidth(460)
+        self.resize(680, 560)
+        self.setMinimumSize(640, 520)
         self.setStyleSheet("""
             QDialog{background:#f3f6fb;font-family:'Segoe UI';}
             QLineEdit,QComboBox,QSpinBox,QDoubleSpinBox{border:1px solid #d7dee8;
@@ -287,8 +300,8 @@ class InventoryDialog(QDialog):
         self._build(existing)
 
     def _build(self, ex):
-        layout = QVBoxLayout(self); layout.setContentsMargins(22,18,22,18)
-        form = QFormLayout(); form.setSpacing(10)
+        layout = QVBoxLayout(self); layout.setContentsMargins(28,22,28,22)
+        form = QFormLayout(); form.setSpacing(14)
 
         self.f_code  = QLineEdit(ex[0] if ex else "")
         self.f_name  = QLineEdit(ex[1] if ex else "")
@@ -300,7 +313,7 @@ class InventoryDialog(QDialog):
         self.f_qty   = QSpinBox(); self.f_qty.setMaximum(999999)
         self.f_qty.setValue(int(ex[4]) if ex and ex[4] else 0)
         def money(v=0):
-            s = QDoubleSpinBox(); s.setMaximum(999999); s.setDecimals(2); s.setPrefix("₱ ")
+            s = QDoubleSpinBox(); s.setMaximum(999999); s.setDecimals(2); s.setPrefix("PHP  ")
             s.setValue(float(v) if v else 0); return s
 
         self.f_cost  = money(ex[5] if ex else 0)
@@ -308,7 +321,8 @@ class InventoryDialog(QDialog):
         self.f_supp  = QLineEdit(ex[7] if ex and ex[7] else "")
         self.f_loc   = QLineEdit(ex[8] if ex and ex[8] else "")
 
-        form.addRow("Item Code *",   self.f_code)
+        if ex:
+            form.addRow("Item Code *",   self.f_code)
         form.addRow("Item Name *",   self.f_name)
         form.addRow("Category",      self.f_cat)
         form.addRow("Unit",          self.f_unit)
@@ -326,8 +340,11 @@ class InventoryDialog(QDialog):
         layout.addWidget(btns)
 
     def _validate(self):
-        if not self.f_code.text().strip() or not self.f_name.text().strip():
-            QMessageBox.warning(self, "Validation", "Item code and name are required.")
+        if not self.f_name.text().strip():
+            QMessageBox.warning(self, "Validation", "Item name is required.")
+            return
+        if self.f_code.isVisible() and not self.f_code.text().strip():
+            QMessageBox.warning(self, "Validation", "Item code is required.")
             return
         self.accept()
 
@@ -338,3 +355,4 @@ class InventoryDialog(QDialog):
                 self.f_qty.value(),
                 self.f_cost.value(), self.f_price.value(),
                 self.f_supp.text().strip(), self.f_loc.text().strip())
+

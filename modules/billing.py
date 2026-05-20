@@ -1,4 +1,4 @@
-"""
+﻿"""
 modules/billing.py
 UnoCarshop ASMIS - Billing
 - Auto-created when service order is marked Completed
@@ -182,6 +182,9 @@ class BillingPage(QWidget):
                 btn_r.setCursor(Qt.PointingHandCursor)
                 btn_r.setStyleSheet("QPushButton{background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;border-radius:5px;font-size:11px;padding:0 8px;}QPushButton:hover{background:#d7f0da;}")
                 btn_r.clicked.connect(lambda _, b=bid: self._issue_receipt(b))
+                if rd[7] == "Void":
+                    btn_r.setEnabled(False)
+                    btn_r.setToolTip("Void invoices cannot be issued as receipts.")
 
                 btn_e = QPushButton("Edit")
                 btn_e.setFixedHeight(27)
@@ -316,10 +319,12 @@ class BillingPage(QWidget):
                    COALESCE(b.amount_paid,0), b.status, COALESCE(b.payment_method,''),
                    b.bill_date, b.created_at, c.full_name, COALESCE(c.phone,''),
                    COALESCE(c.email,''), COALESCE(c.address,''), COALESCE(so.order_no,'N/A'),
-                   COALESCE(v.plate_no,''), COALESCE(v.make,''), COALESCE(v.model,''), b.order_id
+                   COALESCE(v.plate_no,''), COALESCE(v.make,''), COALESCE(v.model,''), b.order_id,
+                   COALESCE(st.type_name,''), COALESCE(so.description,'')
             FROM billing b
             JOIN customers c ON b.cust_id=c.cust_id
             LEFT JOIN service_orders so ON b.order_id=so.order_id
+            LEFT JOIN service_types st ON so.svc_type_id=st.svc_type_id
             LEFT JOIN vehicles v ON so.vehicle_id=v.vehicle_id
             WHERE b.bill_id=%s
         """, (bill_id,))
@@ -345,9 +350,31 @@ class BillingPage(QWidget):
         paid_amount = row[3] if row[5] == "Paid" else row[4]
         balance = 0 if row[5] == "Paid" else max(float(row[3] or 0) - float(row[4] or 0), 0)
         issued_at = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+        receipt_date = datetime.now().strftime("%Y-%m-%d")
         vehicle = " ".join([str(x) for x in row[14:17] if x]).strip() or "N/A"
+        service_name = row[18] or "Service"
+        service_desc = row[19] or ""
+        vat_amount = float(row[3] or 0) * (12 / 112)
+        net_of_vat = float(row[3] or 0) - vat_amount
 
         line_rows = ""
+        line_rows += f"""
+            <tr>
+                <td>{_safe(service_name)}</td>
+                <td class="num">1</td>
+                <td class="num">{_money(0)}</td>
+                <td class="num">{_money(0)}</td>
+            </tr>
+        """
+        if service_desc:
+            line_rows += f"""
+                <tr>
+                    <td>{_safe(service_desc)}</td>
+                    <td class="num">1</td>
+                    <td class="num">{_money(0)}</td>
+                    <td class="num">{_money(0)}</td>
+                </tr>
+            """
         if parts:
             for name, qty, unit_price, line_total in parts:
                 line_rows += f"""
@@ -409,30 +436,32 @@ td {{ border-bottom: 1px solid #e8edf4; padding: 9px 8px; font-size: 13px; }}
     <div class="top">
         <div>
             <h1>UnoCarshop</h1>
-            <div class="muted">Auto Shop Management & Information System<br>Official Receipt</div>
+            <div class="muted">Auto Shop Management & Information System<br>OFFICIAL SERVICE RECEIPT</div>
         </div>
         <div class="receipt-no">
-            <strong>Receipt for Invoice {_safe(row[0])}</strong><br>
-            Bill Date: {_safe(row[7])}<br>
-            Issued: {_safe(issued_at)}<br>
+            <strong>SERVICE INVOICE NO.: {_safe(row[0])}</strong><br>
+            DATE: {_safe(receipt_date)}<br>
+            ISSUED: {_safe(issued_at)}<br>
             <span class="paid">{_safe(row[5])}</span>
         </div>
     </div>
 
     <div class="grid">
         <div class="box">
-            <div class="label">Received From</div>
+            <div class="label">SOLD TO</div>
             <strong>{_safe(row[9])}</strong><br>
-            <span class="muted">{_safe(row[10])} {_safe(row[11])}<br>{_safe(row[12])}</span>
+            <span class="muted">ADDRESS: {_safe(row[12])}</span><br>
+            <span class="muted">TIN: 210-8910-918-000</span>
         </div>
         <div class="box">
-            <div class="label">Service Details</div>
+            <div class="label">TRANSACTION DETAILS</div>
             Order No: <strong>{_safe(row[13])}</strong><br>
             Vehicle: <strong>{_safe(vehicle)}</strong><br>
             Payment: <strong>{_safe(row[6] or "N/A")}</strong>
         </div>
     </div>
 
+    <div class="label">IN PAYMENT OF THE FOLLOWING SERVICE / TRANSACTION / DESCRIPTION:</div>
     <table>
         <thead>
             <tr><th>Description</th><th class="num">Qty</th><th class="num">Unit Price</th><th class="num">Amount</th></tr>
@@ -449,9 +478,12 @@ td {{ border-bottom: 1px solid #e8edf4; padding: 9px 8px; font-size: 13px; }}
     </table>
 
     <table class="totals">
-        <tr><td>Parts Subtotal</td><td class="num">{_money(row[1])}</td></tr>
-        <tr><td>Manpower</td><td class="num">{_money(row[2])}</td></tr>
-        <tr class="grand"><td>Total</td><td class="num">{_money(row[3])}</td></tr>
+        <tr><td>AMOUNT</td><td class="num">{_money(row[3])}</td></tr>
+        <tr><td>TOTAL SALES</td><td class="num">{_money(row[3])}</td></tr>
+        <tr><td>LESS: 12% VAT</td><td class="num">{_money(vat_amount)}</td></tr>
+        <tr><td>Net of VAT / Total</td><td class="num">{_money(net_of_vat)}</td></tr>
+        <tr><td>TOTAL AMOUNT DUE</td><td class="num">{_money(row[3])}</td></tr>
+        <tr class="grand"><td>TOTAL</td><td class="num">{_money(row[3])}</td></tr>
         <tr><td>Amount Paid</td><td class="num">{_money(paid_amount)}</td></tr>
         <tr><td>Balance</td><td class="num">{_money(balance)}</td></tr>
     </table>
@@ -518,7 +550,8 @@ class BillingDialog(QDialog):
         super().__init__(parent)
         ensure_billing_manpower_column()
         self.setWindowTitle("Invoice")
-        self.setFixedWidth(460)
+        self.resize(700, 580)
+        self.setMinimumSize(660, 540)
         self.setStyleSheet(
             "QDialog{background:#f3f6fb;font-family:'Segoe UI';}"
             "QComboBox,QDoubleSpinBox,QDateEdit{border:1px solid #d7dee8;border-radius:7px;padding:6px 10px;font-size:13px;background:white;}"
@@ -540,9 +573,9 @@ class BillingDialog(QDialog):
 
     def _build(self, ex):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setContentsMargins(28, 22, 28, 22)
         form = QFormLayout()
-        form.setSpacing(10)
+        form.setSpacing(14)
         form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.f_order = QComboBox()
@@ -657,3 +690,4 @@ class BillingDialog(QDialog):
             self.f_method.currentText(),
             self.f_date.date().toString("yyyy-MM-dd"),
         )
+

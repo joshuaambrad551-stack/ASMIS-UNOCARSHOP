@@ -1,4 +1,4 @@
-"""
+﻿"""
 modules/daily_history.py
 UnoCarshop ASMIS daily snapshot history page.
 """
@@ -208,3 +208,4 @@ class DailyHistoryPage(QWidget):
             self.details.setPlainText(json.dumps(details or {}, indent=2, sort_keys=True, default=str))
         except Exception as exc:
             error(self, "Load Snapshot Failed", str(exc))
+

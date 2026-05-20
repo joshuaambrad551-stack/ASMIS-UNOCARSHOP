@@ -1,6 +1,6 @@
-"""
+﻿"""
 modules/service_orders.py
-UnoCarshop ASMIS — Service Orders (Integrated v2)
+UnoCarshop ASMIS - Service Orders (Integrated v2)
 
 Key integrations:
 - Completing an order auto-creates billing (via DB trigger)
@@ -45,17 +45,17 @@ class ServiceOrdersPage(QWidget):
 
         # Stats
         stats = QHBoxLayout(); stats.setSpacing(12)
-        self.s_pending  = StatCard("Pending",     "0", "⏳", ORANGE)
-        self.s_inprog   = StatCard("In Progress", "0", "🔧", BLUE)
-        self.s_done     = StatCard("Completed",   "0", "✅", GREEN)
-        self.s_cancel   = StatCard("Cancelled",   "0", "❌", RED)
+        self.s_pending  = StatCard("Pending",     "0", "?", ORANGE)
+        self.s_inprog   = StatCard("In Progress", "0", "?", BLUE)
+        self.s_done     = StatCard("Completed",   "0", "?", GREEN)
+        self.s_cancel   = StatCard("Cancelled",   "0", "?", RED)
         for s in [self.s_pending, self.s_inprog, self.s_done, self.s_cancel]:
             s.setFixedHeight(88); stats.addWidget(s)
         layout.addLayout(stats)
 
         # Toolbar
         toolbar = QHBoxLayout()
-        self.search = SearchBar("Search order #, customer, plate…")
+        self.search = SearchBar("Search order #, customer, plate...")
         self.search.setFixedWidth(260)
         self.search.textChanged.connect(self._filter)
 
@@ -71,9 +71,9 @@ class ServiceOrdersPage(QWidget):
         self.priority_filter.setStyleSheet(self._cs())
         self.priority_filter.currentIndexChanged.connect(self._filter)
 
-        btn_add     = OrangeButton("➕  New Order")
+        btn_add     = OrangeButton("?  New Order")
         btn_add.clicked.connect(self._add_order)
-        btn_refresh = GhostButton("🔄  Refresh")
+        btn_refresh = GhostButton("Refresh")
         btn_refresh.clicked.connect(self.refresh)
 
         toolbar.addWidget(self.search)
@@ -251,7 +251,7 @@ class ServiceOrdersPage(QWidget):
                 bus.service_orders_changed.emit()
                 bus.dashboard_refresh.emit()
 
-                # If just completed → billing was auto-created by trigger
+                # If just completed -> billing was auto-created by trigger
                 if new_status == "Completed" and old_status != "Completed":
                     bus.billing_changed.emit()
                     info(self, "Completed",
@@ -263,7 +263,7 @@ class ServiceOrdersPage(QWidget):
                 error(self, "Error", str(e))
 
     def _manage_parts(self, order_id):
-        """Open parts usage dialog — deducts inventory automatically."""
+        """Open parts usage dialog - deducts inventory automatically."""
         dlg = PartsDialog(self, order_id)
         dlg.exec_()
         self.refresh()
@@ -299,7 +299,8 @@ class ServiceOrderDialog(QDialog):
     def __init__(self, parent, existing=None):
         super().__init__(parent)
         self.setWindowTitle("Service Order")
-        self.setFixedWidth(500)
+        self.resize(760, 700)
+        self.setMinimumSize(700, 640)
         self.setStyleSheet("""
             QDialog{background:#f3f6fb;font-family:'Segoe UI';}
             QLineEdit,QComboBox,QDateEdit,QTextEdit{
@@ -327,8 +328,8 @@ class ServiceOrderDialog(QDialog):
         except: pass
 
     def _build(self, ex):
-        layout = QVBoxLayout(self); layout.setContentsMargins(24,20,24,20)
-        form = QFormLayout(); form.setSpacing(10)
+        layout = QVBoxLayout(self); layout.setContentsMargins(30,24,30,24)
+        form = QFormLayout(); form.setSpacing(14)
         form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.f_veh = QComboBox(); self.f_veh.addItems(list(self._vehicles.keys()))
@@ -355,7 +356,7 @@ class ServiceOrderDialog(QDialog):
                 if sid == ex[3]: self.f_svc.setCurrentText(label); break
 
         self.f_desc    = QTextEdit(ex[4] if ex and ex[4] else "")
-        self.f_desc.setFixedHeight(60)
+        self.f_desc.setFixedHeight(90)
         self.f_status  = QComboBox()
         self.f_status.addItems(["Pending","In Progress","Completed","Cancelled"])
         if ex and ex[5]: self.f_status.setCurrentText(ex[5])
@@ -368,7 +369,7 @@ class ServiceOrderDialog(QDialog):
             else QDate.currentDate()
         )
         self.f_remarks = QTextEdit(ex[8] if ex and ex[8] else "")
-        self.f_remarks.setFixedHeight(50)
+        self.f_remarks.setFixedHeight(80)
 
         form.addRow("Vehicle *",   self.f_veh)
         form.addRow("Customer *",  self.f_cust)
@@ -435,13 +436,13 @@ class ServiceOrderDialog(QDialog):
 
 
 class PartsDialog(QDialog):
-    """Manage parts used in a service order — auto-deducts inventory."""
+    """Manage parts used in a service order - auto-deducts inventory."""
     def __init__(self, parent, order_id):
         super().__init__(parent)
         self.order_id = order_id
         self.setWindowTitle("Parts Used in Service Order")
-        self.setFixedWidth(620)
-        self.setFixedHeight(480)
+        self.resize(900, 620)
+        self.setMinimumSize(860, 580)
         self.setStyleSheet("""
             QDialog{background:#f3f6fb;font-family:'Segoe UI';}
             QComboBox,QSpinBox,QDoubleSpinBox{border:1px solid #d7dee8;
@@ -455,7 +456,7 @@ class PartsDialog(QDialog):
         try:
             conn = get_connection(); cur = conn.cursor()
             cur.execute("""
-                SELECT item_id, item_code||' — '||item_name, quantity, unit_price
+                SELECT item_id, item_code||' - '||item_name, quantity, unit_price
                 FROM inventory WHERE status='Active' AND quantity>0
                 ORDER BY item_name
             """)
@@ -479,7 +480,7 @@ class PartsDialog(QDialog):
         self.f_qty  = QSpinBox(); self.f_qty.setMinimum(1); self.f_qty.setMaximum(9999)
         self.f_qty.setFixedHeight(36); self.f_qty.setFixedWidth(80)
         self.f_price= QDoubleSpinBox(); self.f_price.setMaximum(999999)
-        self.f_price.setDecimals(2); self.f_price.setPrefix("₱ ")
+        self.f_price.setDecimals(2); self.f_price.setPrefix("PHP  ")
         self.f_price.setFixedHeight(36); self.f_price.setFixedWidth(120)
         self.f_price.setReadOnly(True)
         self.f_price.setButtonSymbols(QDoubleSpinBox.NoButtons)
@@ -505,7 +506,7 @@ class PartsDialog(QDialog):
         layout.addWidget(self.parts_table)
 
         # Total
-        self.total_lbl = QLabel("Total Parts Cost: ₱0.00")
+        self.total_lbl = QLabel("Total Parts Cost: PHP 0.00")
         self.total_lbl.setStyleSheet(
             f"font-size:14px;font-weight:700;color:{TEXT_DARK};"
             "background:#e7eef8;border:1px solid #8aa4c4;border-radius:6px;padding:8px 12px;"
@@ -550,7 +551,7 @@ class PartsDialog(QDialog):
 
             cur.execute("""
                 SELECT sop.part_usage_id,
-                       i.item_code||' — '||i.item_name,
+                       i.item_code||' - '||i.item_name,
                        sop.qty_used, sop.unit_price,
                        sop.qty_used*sop.unit_price AS subtotal
                 FROM service_order_parts sop
@@ -565,7 +566,7 @@ class PartsDialog(QDialog):
                 self.parts_table.insertRow(r)
                 self.parts_table.setRowHeight(r, 36)
                 for c, val in enumerate(rd[1:]):
-                    text = f"₱{float(val):,.2f}" if c in (2,3) else str(val)
+                    text = f"PHP {float(val):,.2f}" if c in (2,3) else str(val)
                     item = QTableWidgetItem(text)
                     item.setTextAlignment(
                         (Qt.AlignRight if c in (2,3) else Qt.AlignLeft) | Qt.AlignVCenter
@@ -583,7 +584,7 @@ class PartsDialog(QDialog):
                 al = QHBoxLayout(act); al.setContentsMargins(4,2,4,2); al.addWidget(btn_r)
                 self.parts_table.setCellWidget(r, 4, act)
 
-            self.total_lbl.setText(f"Total Parts Cost: ₱{total:,.2f}")
+            self.total_lbl.setText(f"Total Parts Cost: PHP {total:,.2f}")
         except Exception as e:
             print(f"Parts load error: {e}")
 
@@ -640,3 +641,4 @@ class PartsDialog(QDialog):
                 bus.dashboard_refresh.emit()
             except Exception as e:
                 error(self, "Error", str(e))
+

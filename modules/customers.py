@@ -1,17 +1,17 @@
-"""
+﻿"""
 modules/customers.py
-UnoCarshop ASMIS — Customers & Vehicles (Integrated v2)
+UnoCarshop ASMIS - Customers & Vehicles (Integrated v2)
 
 Key changes:
 - Vehicle make/model/year/color are FREE TEXT fields (no dropdowns)
 - Fires customers_changed + vehicles_changed + dashboard_refresh
-- Customer → Vehicle → Service history chain visible
+- Customer -> Vehicle -> Service history chain visible
 """
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QComboBox, QDialog, QFormLayout, QDialogButtonBox,
     QTableWidgetItem, QPushButton, QLineEdit,
-    QTextEdit, QSpinBox, QFrame
+    QTextEdit, QSpinBox, QFrame, QDoubleSpinBox, QScrollArea
 )
 from PyQt5.QtCore import Qt
 import sys, os
@@ -24,6 +24,25 @@ from modules.widgets import (
 )
 from db.connection import get_connection
 from db.events import bus
+
+INSURANCE_PROVIDERS = [
+    "Pioneer",
+    "Western Guaranty Corporation",
+    "Government Service Insurance System",
+    "The Mercantile Insurance Co. Inc.",
+    "CommonWealth Insurance Company",
+    "Sterling Insurance Company Inc.",
+    "Standard Insurance",
+    "PhilBritish Insurance",
+    "Milestone Gruaranty and Assurance Corp.",
+    "Pacific Union Insurance Company",
+    "Paramount Life & General Insurance",
+    "Stronghold Insurance Company. Incorporated",
+    "Visayan Surety & Insurance Corp.",
+    "BPI MS Insurance Corporation",
+    "PhilFirst Insurance Company Inc.",
+    "Oona Insurance",
+]
 
 
 class CustomersPage(QWidget):
@@ -40,9 +59,9 @@ class CustomersPage(QWidget):
         layout.setSpacing(16)
 
         stats = QHBoxLayout(); stats.setSpacing(12)
-        self.s_cust = StatCard("Total Customers", "0", "👤", ORANGE)
-        self.s_veh  = StatCard("Total Vehicles",  "0", "🚗", BLUE)
-        self.s_orders= StatCard("Active Orders",  "0", "🔧", GREEN)
+        self.s_cust = StatCard("Total Customers", "0", "?", ORANGE)
+        self.s_veh  = StatCard("Total Vehicles",  "0", "?", BLUE)
+        self.s_orders= StatCard("Active Orders",  "0", "?", GREEN)
         for s in [self.s_cust, self.s_veh, self.s_orders]:
             s.setFixedHeight(88); stats.addWidget(s)
         stats.addStretch()
@@ -56,19 +75,19 @@ class CustomersPage(QWidget):
                 padding:8px 20px;font-size:13px;margin-right:4px;}
             QTabBar::tab:selected{background:#0b1f3a;color:white;font-weight:700;}
         """)
-        tabs.addTab(self._build_customers_tab(), "👤  Customers")
-        tabs.addTab(self._build_vehicles_tab(),  "🚗  Vehicles")
+        tabs.addTab(self._build_customers_tab(), "Customers")
+        tabs.addTab(self._build_vehicles_tab(),  "Vehicles")
         layout.addWidget(tabs)
 
     def _build_customers_tab(self):
         w = QWidget(); w.setStyleSheet("background:white;")
         layout = QVBoxLayout(w); layout.setContentsMargins(16,16,16,16); layout.setSpacing(12)
         toolbar = QHBoxLayout()
-        self.cust_search = SearchBar("Search customers…")
+        self.cust_search = SearchBar("Search customers...")
         self.cust_search.setFixedWidth(280)
         self.cust_search.textChanged.connect(self._filter_customers)
-        btn_add = OrangeButton("➕  Add Customer"); btn_add.clicked.connect(self._add_customer)
-        btn_ref = GhostButton("🔄  Refresh");       btn_ref.clicked.connect(self.refresh)
+        btn_add = OrangeButton("?  Add Customer"); btn_add.clicked.connect(self._add_customer)
+        btn_ref = GhostButton("Refresh");       btn_ref.clicked.connect(self.refresh)
         toolbar.addWidget(self.cust_search); toolbar.addStretch()
         btn_add = OrangeButton("Add Customer + Vehicle"); btn_add.clicked.connect(self._add_customer)
         toolbar.addWidget(btn_ref); toolbar.addWidget(btn_add)
@@ -91,15 +110,15 @@ class CustomersPage(QWidget):
         w = QWidget(); w.setStyleSheet("background:white;")
         layout = QVBoxLayout(w); layout.setContentsMargins(16,16,16,16); layout.setSpacing(12)
         toolbar = QHBoxLayout()
-        self.veh_search = SearchBar("Search by plate, make, model, owner…")
+        self.veh_search = SearchBar("Search by plate, brand, model, owner...")
         self.veh_search.setFixedWidth(300)
         self.veh_search.textChanged.connect(self._filter_vehicles)
-        btn_add = OrangeButton("➕  Add Vehicle"); btn_add.clicked.connect(self._add_vehicle)
-        btn_ref = GhostButton("🔄  Refresh");      btn_ref.clicked.connect(self.refresh)
+        btn_add = OrangeButton("?  Add Vehicle"); btn_add.clicked.connect(self._add_vehicle)
+        btn_ref = GhostButton("Refresh");      btn_ref.clicked.connect(self.refresh)
         toolbar.addWidget(self.veh_search); toolbar.addStretch()
         toolbar.addWidget(btn_ref); toolbar.addWidget(btn_add)
         layout.addLayout(toolbar)
-        cols = ["Plate No.","Owner","Make","Model","Year","Color","VIN","Actions"]
+        cols = ["Plate No.","Owner","Brand","Model","Year","Color","Actions"]
         self.veh_table = StyledTable(cols)
         self.veh_table.setColumnWidth(0, 100)
         self.veh_table.setColumnWidth(1, 150)
@@ -107,7 +126,6 @@ class CustomersPage(QWidget):
         self.veh_table.setColumnWidth(3, 100)
         self.veh_table.setColumnWidth(4, 55)
         self.veh_table.setColumnWidth(5, 80)
-        self.veh_table.setColumnWidth(6, 120)
         self.veh_table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.veh_table)
         self.veh_count = QLabel(""); self.veh_count.setStyleSheet(f"color:{TEXT_SOFT};font-size:12px;")
@@ -187,7 +205,7 @@ class CustomersPage(QWidget):
                 SELECT v.vehicle_id, v.plate_no, c.full_name,
                        COALESCE(v.make,''), COALESCE(v.model,''),
                        COALESCE(CAST(v.year AS TEXT),''),
-                       COALESCE(v.color,''), COALESCE(v.vin,'')
+                       COALESCE(v.color,'')
                 FROM vehicles v JOIN customers c ON v.cust_id=c.cust_id
                 WHERE 1=1
             """
@@ -205,7 +223,7 @@ class CustomersPage(QWidget):
                 r = self.veh_table.rowCount()
                 self.veh_table.insertRow(r); self.veh_table.setRowHeight(r, 38)
                 self._veh_ids.append(rd[0])
-                for c, val in enumerate(rd[1:8]):
+                for c, val in enumerate(rd[1:7]):
                     item = QTableWidgetItem(str(val) if val else "")
                     item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
                     self.veh_table.setItem(r, c, item)
@@ -220,7 +238,7 @@ class CustomersPage(QWidget):
                 btn_d.setStyleSheet("QPushButton{background:#ffebee;color:#c62828;border:1px solid #ef9a9a;border-radius:5px;font-size:11px;padding:0 8px;}QPushButton:hover{background:#ffcdd2;}")
                 btn_d.clicked.connect(lambda _, v_=vid: self._delete_vehicle(v_))
                 al.addWidget(btn_e); al.addWidget(btn_d)
-                self.veh_table.setCellWidget(r, 7, act)
+                self.veh_table.setCellWidget(r, 6, act)
 
             self.veh_count.setText(f"Showing {len(rows)} vehicle(s)")
         except Exception as e:
@@ -229,7 +247,7 @@ class CustomersPage(QWidget):
     def _filter_customers(self): self._load_customers(self.cust_search.text())
     def _filter_vehicles(self):  self._load_vehicles(self.veh_search.text())
 
-    # ── Customer CRUD ─────────────────────────────────────
+    # â”€â”€ Customer CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def _add_customer(self):
         dlg = CustomerVehicleDialog(self)
         if dlg.exec_() == QDialog.Accepted:
@@ -237,12 +255,16 @@ class CustomersPage(QWidget):
             try:
                 conn = get_connection(); cur = conn.cursor()
                 cur.execute(
-                    "INSERT INTO customers (cust_code,first_name,last_name,phone,email,address) VALUES (%s,%s,%s,%s,%s,%s) RETURNING cust_id",
+                    """INSERT INTO customers
+                       (cust_code,first_name,last_name,phone,email,address,
+                        payment_type,coverage_type,insurance_provider,loa_amount,assured_share)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                       RETURNING cust_id""",
                     cust_data
                 )
                 cust_id = cur.fetchone()[0]
                 cur.execute(
-                    "INSERT INTO vehicles (cust_id,plate_no,make,model,year,color,vin) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                    "INSERT INTO vehicles (cust_id,plate_no,make,model,year,color) VALUES (%s,%s,%s,%s,%s,%s)",
                     (cust_id,) + vehicle_data
                 )
                 conn.commit(); conn.close()
@@ -256,7 +278,13 @@ class CustomersPage(QWidget):
     def _edit_customer(self, cust_id):
         try:
             conn = get_connection(); cur = conn.cursor()
-            cur.execute("SELECT cust_code,first_name,last_name,phone,email,address FROM customers WHERE cust_id=%s", (cust_id,))
+            cur.execute("""SELECT cust_code,first_name,last_name,phone,email,address,
+                                  COALESCE(payment_type,'Cash'),
+                                  COALESCE(coverage_type,'Own Damage'),
+                                  COALESCE(insurance_provider,''),
+                                  COALESCE(loa_amount,0),
+                                  COALESCE(assured_share,0)
+                           FROM customers WHERE cust_id=%s""", (cust_id,))
             row = cur.fetchone(); conn.close()
         except Exception as e: error(self, "Error", str(e)); return
         dlg = CustomerDialog(self, row)
@@ -264,7 +292,11 @@ class CustomersPage(QWidget):
             data = dlg.get_data()
             try:
                 conn = get_connection(); cur = conn.cursor()
-                cur.execute("UPDATE customers SET cust_code=%s,first_name=%s,last_name=%s,phone=%s,email=%s,address=%s WHERE cust_id=%s", data+(cust_id,))
+                cur.execute("""UPDATE customers
+                               SET cust_code=%s,first_name=%s,last_name=%s,phone=%s,email=%s,address=%s,
+                                   payment_type=%s,coverage_type=%s,insurance_provider=%s,
+                                   loa_amount=%s,assured_share=%s
+                               WHERE cust_id=%s""", data+(cust_id,))
                 conn.commit(); conn.close()
                 info(self, "Updated", "Customer updated.")
                 self.refresh()
@@ -279,8 +311,8 @@ class CustomersPage(QWidget):
                 cur.execute("""
                     SELECT
                         (SELECT COUNT(*) FROM service_orders WHERE cust_id=%s),
-                        (SELECT COUNT(*) FROM insurance WHERE cust_id=%s),
-                        (SELECT COUNT(*) FROM billing WHERE cust_id=%s)
+                        (SELECT COUNT(*) FROM insurance WHERE cust_id=%s AND status!='Cancelled'),
+                        (SELECT COUNT(*) FROM billing WHERE cust_id=%s AND status!='Void')
                 """, (cust_id, cust_id, cust_id))
                 order_count, insurance_count, billing_count = cur.fetchone()
                 if order_count or insurance_count or billing_count:
@@ -300,7 +332,7 @@ class CustomersPage(QWidget):
                 bus.dashboard_refresh.emit()
             except Exception as e: error(self, "Error", str(e))
 
-    # ── Vehicle CRUD ──────────────────────────────────────
+    # â”€â”€ Vehicle CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def _show_customer_vehicles(self, cust_id):
         dlg = CustomerVehiclesDialog(self, cust_id)
         dlg.exec_()
@@ -312,7 +344,7 @@ class CustomersPage(QWidget):
             data = dlg.get_data()
             try:
                 conn = get_connection(); cur = conn.cursor()
-                cur.execute("INSERT INTO vehicles (cust_id,plate_no,make,model,year,color,vin) VALUES (%s,%s,%s,%s,%s,%s,%s)", data)
+                cur.execute("INSERT INTO vehicles (cust_id,plate_no,make,model,year,color) VALUES (%s,%s,%s,%s,%s,%s)", data)
                 conn.commit(); conn.close()
                 info(self, "Saved", "Vehicle added.")
                 self.refresh()
@@ -323,7 +355,7 @@ class CustomersPage(QWidget):
     def _edit_vehicle_for_customer(self, vehicle_id, cust_id):
         try:
             conn = get_connection(); cur = conn.cursor()
-            cur.execute("SELECT cust_id,plate_no,make,model,year,color,vin FROM vehicles WHERE vehicle_id=%s AND cust_id=%s", (vehicle_id, cust_id))
+            cur.execute("SELECT cust_id,plate_no,make,model,year,color FROM vehicles WHERE vehicle_id=%s AND cust_id=%s", (vehicle_id, cust_id))
             row = cur.fetchone(); conn.close()
         except Exception as e: error(self, "Error", str(e)); return
         if not row:
@@ -334,7 +366,7 @@ class CustomersPage(QWidget):
             data = dlg.get_data()
             try:
                 conn = get_connection(); cur = conn.cursor()
-                cur.execute("UPDATE vehicles SET cust_id=%s,plate_no=%s,make=%s,model=%s,year=%s,color=%s,vin=%s WHERE vehicle_id=%s", data+(vehicle_id,))
+                cur.execute("UPDATE vehicles SET cust_id=%s,plate_no=%s,make=%s,model=%s,year=%s,color=%s WHERE vehicle_id=%s", data+(vehicle_id,))
                 conn.commit(); conn.close()
                 info(self, "Updated", "Vehicle updated.")
                 self.refresh()
@@ -348,7 +380,7 @@ class CustomersPage(QWidget):
             data = dlg.get_data()
             try:
                 conn = get_connection(); cur = conn.cursor()
-                cur.execute("INSERT INTO vehicles (cust_id,plate_no,make,model,year,color,vin) VALUES (%s,%s,%s,%s,%s,%s,%s)", data)
+                cur.execute("INSERT INTO vehicles (cust_id,plate_no,make,model,year,color) VALUES (%s,%s,%s,%s,%s,%s)", data)
                 conn.commit(); conn.close()
                 info(self, "Saved", "Vehicle added.")
                 self.refresh()
@@ -359,7 +391,7 @@ class CustomersPage(QWidget):
     def _edit_vehicle(self, vehicle_id):
         try:
             conn = get_connection(); cur = conn.cursor()
-            cur.execute("SELECT cust_id,plate_no,make,model,year,color,vin FROM vehicles WHERE vehicle_id=%s", (vehicle_id,))
+            cur.execute("SELECT cust_id,plate_no,make,model,year,color FROM vehicles WHERE vehicle_id=%s", (vehicle_id,))
             row = cur.fetchone(); conn.close()
         except Exception as e: error(self, "Error", str(e)); return
         dlg = VehicleDialog(self, row)
@@ -367,7 +399,7 @@ class CustomersPage(QWidget):
             data = dlg.get_data()
             try:
                 conn = get_connection(); cur = conn.cursor()
-                cur.execute("UPDATE vehicles SET cust_id=%s,plate_no=%s,make=%s,model=%s,year=%s,color=%s,vin=%s WHERE vehicle_id=%s", data+(vehicle_id,))
+                cur.execute("UPDATE vehicles SET cust_id=%s,plate_no=%s,make=%s,model=%s,year=%s,color=%s WHERE vehicle_id=%s", data+(vehicle_id,))
                 conn.commit(); conn.close()
                 info(self, "Updated", "Vehicle updated.")
                 self.refresh()
@@ -382,7 +414,7 @@ class CustomersPage(QWidget):
                 cur.execute("""
                     SELECT
                         (SELECT COUNT(*) FROM service_orders WHERE vehicle_id=%s),
-                        (SELECT COUNT(*) FROM insurance WHERE vehicle_id=%s)
+                        (SELECT COUNT(*) FROM insurance WHERE vehicle_id=%s AND status!='Cancelled')
                 """, (vehicle_id, vehicle_id))
                 order_count, insurance_count = cur.fetchone()
                 if order_count or insurance_count:
@@ -407,24 +439,45 @@ class CustomerDialog(QDialog):
     def __init__(self, parent, existing=None):
         super().__init__(parent)
         self.setWindowTitle("Customer")
-        self.setFixedWidth(420)
+        self.setFixedWidth(560)
         self.setStyleSheet("QDialog{background:#f3f6fb;font-family:'Segoe UI';}"
-                           "QLineEdit,QTextEdit{border:1px solid #d7dee8;border-radius:7px;padding:6px 10px;font-size:13px;background:white;}")
-        layout = QVBoxLayout(self); layout.setContentsMargins(22,18,22,18)
-        form = QFormLayout(); form.setSpacing(10); form.setLabelAlignment(Qt.AlignRight|Qt.AlignVCenter)
+                           "QLineEdit,QTextEdit,QComboBox,QDoubleSpinBox{border:1px solid #d7dee8;border-radius:7px;padding:6px 10px;font-size:13px;background:white;}")
+        layout = QVBoxLayout(self); layout.setContentsMargins(28,22,28,22)
+        form = QFormLayout(); form.setSpacing(14); form.setLabelAlignment(Qt.AlignRight|Qt.AlignVCenter)
         self.f_code  = QLineEdit(existing[0] if existing else "")
         self.f_first = QLineEdit(existing[1] if existing else "")
         self.f_last  = QLineEdit(existing[2] if existing else "")
         self.f_phone = QLineEdit(existing[3] if existing and existing[3] else "")
         self.f_email = QLineEdit(existing[4] if existing and existing[4] else "")
-        self.f_addr  = QTextEdit(existing[5] if existing and existing[5] else ""); self.f_addr.setFixedHeight(60)
+        self.f_addr  = QTextEdit(existing[5] if existing and existing[5] else ""); self.f_addr.setFixedHeight(90)
+        self.f_payment = QComboBox(); self.f_payment.addItems(["Cash", "Insurance"])
+        self.f_payment.setCurrentText(existing[6] if existing and existing[6] else "Cash")
+        self.f_coverage = QComboBox(); self.f_coverage.addItems(["Own Damage", "Property Damage"])
+        self.f_coverage.setCurrentText(existing[7] if existing and existing[7] else "Own Damage")
+        self.f_provider = QComboBox(); self.f_provider.addItems(INSURANCE_PROVIDERS)
+        if existing and existing[8]:
+            self.f_provider.setCurrentText(existing[8])
+        self.f_loa = QDoubleSpinBox(); self.f_loa.setMaximum(99999999); self.f_loa.setDecimals(2)
+        self.f_loa.setPrefix("PHP "); self.f_loa.setValue(float(existing[9]) if existing else 0)
+        self.f_assured = QDoubleSpinBox(); self.f_assured.setMaximum(99999999); self.f_assured.setDecimals(2)
+        self.f_assured.setPrefix("PHP "); self.f_assured.setValue(float(existing[10]) if existing else 0)
         form.addRow("Cust. Code *", self.f_code)
         form.addRow("First Name *", self.f_first)
         form.addRow("Last Name *",  self.f_last)
         form.addRow("Phone",        self.f_phone)
         form.addRow("Email",        self.f_email)
         form.addRow("Address",      self.f_addr)
+        form.addRow("Payment Type *", self.f_payment)
+        form.addRow("Coverage *", self.f_coverage)
+        self.provider_label = QLabel("Insurance Provider *")
+        self.loa_label = QLabel("Letter of Authority Amount *")
+        self.assured_label = QLabel("Assured Share *")
+        form.addRow(self.provider_label, self.f_provider)
+        form.addRow(self.loa_label, self.f_loa)
+        form.addRow(self.assured_label, self.f_assured)
         layout.addLayout(form)
+        self.f_payment.currentTextChanged.connect(self._toggle_insurance_fields)
+        self._toggle_insurance_fields()
         btns = QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel)
         btns.button(QDialogButtonBox.Save).setStyleSheet("background:#0b1f3a;color:white;border:none;border-radius:6px;padding:6px 18px;font-weight:700;")
         btns.button(QDialogButtonBox.Cancel).setStyleSheet("background:#eee;color:#555;border:none;border-radius:6px;padding:6px 14px;")
@@ -432,52 +485,93 @@ class CustomerDialog(QDialog):
         layout.addWidget(btns)
 
     def get_data(self):
+        is_insured = self.f_payment.currentText() == "Insurance"
         return (self.f_code.text().strip(), self.f_first.text().strip(),
                 self.f_last.text().strip(), self.f_phone.text().strip(),
-                self.f_email.text().strip(), self.f_addr.toPlainText().strip())
+                self.f_email.text().strip(), self.f_addr.toPlainText().strip(),
+                self.f_payment.currentText().strip(),
+                self.f_coverage.currentText().strip(),
+                (self.f_provider.currentText().strip() if is_insured else None),
+                (self.f_loa.value() if is_insured else 0),
+                (self.f_assured.value() if is_insured else 0))
+
+    def _toggle_insurance_fields(self):
+        insured = self.f_payment.currentText() == "Insurance"
+        self.provider_label.setVisible(insured); self.f_provider.setVisible(insured)
+        self.loa_label.setVisible(insured); self.f_loa.setVisible(insured)
+        self.assured_label.setVisible(insured); self.f_assured.setVisible(insured)
 
 
 class CustomerVehicleDialog(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
         self.setWindowTitle("Add Customer and Vehicle")
-        self.setFixedWidth(520)
+        self.resize(820, 700)
+        self.setMinimumSize(760, 640)
         self.setStyleSheet("QDialog{background:#f3f6fb;font-family:'Segoe UI';}"
-                           "QLineEdit,QTextEdit,QSpinBox{border:1px solid #d7dee8;border-radius:7px;padding:6px 10px;font-size:13px;background:white;}"
-                           "QLabel{font-size:13px;color:#3b362f;}")
-        layout = QVBoxLayout(self); layout.setContentsMargins(22,18,22,18); layout.setSpacing(14)
+                           "QLineEdit,QTextEdit,QSpinBox,QComboBox,QDoubleSpinBox{border:1px solid #d7dee8;border-radius:8px;padding:9px 12px;font-size:15px;background:white;min-height:40px;}"
+                           "QLabel{font-size:15px;color:#3b362f;}")
+        layout = QVBoxLayout(self); layout.setContentsMargins(20,16,20,16); layout.setSpacing(12)
 
-        layout.addWidget(QLabel("Customer"))
-        cust_form = QFormLayout(); cust_form.setSpacing(10); cust_form.setLabelAlignment(Qt.AlignRight|Qt.AlignVCenter)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(16, 12, 16, 12)
+        content_layout.setSpacing(18)
+
+        section_customer = QLabel("Customer")
+        section_customer.setStyleSheet("font-size:18px;font-weight:700;color:#0b1f3a;")
+        content_layout.addWidget(section_customer)
+        cust_form = QFormLayout(); cust_form.setSpacing(16); cust_form.setLabelAlignment(Qt.AlignRight|Qt.AlignVCenter)
         self.f_code  = QLineEdit()
         self.f_first = QLineEdit()
         self.f_last  = QLineEdit()
         self.f_phone = QLineEdit()
         self.f_email = QLineEdit()
-        self.f_addr  = QTextEdit(); self.f_addr.setFixedHeight(58)
+        self.f_addr  = QTextEdit(); self.f_addr.setFixedHeight(120)
+        self.f_payment = QComboBox(); self.f_payment.addItems(["Cash", "Insurance"])
+        self.f_coverage = QComboBox(); self.f_coverage.addItems(["Own Damage", "Property Damage"])
+        self.f_provider = QComboBox(); self.f_provider.addItems(INSURANCE_PROVIDERS)
+        self.f_loa = QDoubleSpinBox(); self.f_loa.setMaximum(99999999); self.f_loa.setDecimals(2); self.f_loa.setPrefix("PHP ")
+        self.f_assured = QDoubleSpinBox(); self.f_assured.setMaximum(99999999); self.f_assured.setDecimals(2); self.f_assured.setPrefix("PHP ")
         cust_form.addRow("Cust. Code *", self.f_code)
         cust_form.addRow("First Name *", self.f_first)
         cust_form.addRow("Last Name *",  self.f_last)
         cust_form.addRow("Phone",        self.f_phone)
         cust_form.addRow("Email",        self.f_email)
         cust_form.addRow("Address",      self.f_addr)
-        layout.addLayout(cust_form)
+        cust_form.addRow("Payment Type *", self.f_payment)
+        cust_form.addRow("Coverage *", self.f_coverage)
+        self.provider_label = QLabel("Insurance Provider *")
+        self.loa_label = QLabel("Letter of Authority Amount *")
+        self.assured_label = QLabel("Assured Share *")
+        cust_form.addRow(self.provider_label, self.f_provider)
+        cust_form.addRow(self.loa_label, self.f_loa)
+        cust_form.addRow(self.assured_label, self.f_assured)
+        content_layout.addLayout(cust_form)
+        self.f_payment.currentTextChanged.connect(self._toggle_insurance_fields)
+        self._toggle_insurance_fields()
 
-        layout.addWidget(QLabel("Vehicle"))
-        veh_form = QFormLayout(); veh_form.setSpacing(10); veh_form.setLabelAlignment(Qt.AlignRight|Qt.AlignVCenter)
+        section_vehicle = QLabel("Vehicle")
+        section_vehicle.setStyleSheet("font-size:18px;font-weight:700;color:#0b1f3a;")
+        content_layout.addWidget(section_vehicle)
+        veh_form = QFormLayout(); veh_form.setSpacing(16); veh_form.setLabelAlignment(Qt.AlignRight|Qt.AlignVCenter)
         self.f_plate = QLineEdit()
         self.f_make  = QLineEdit(); self.f_make.setPlaceholderText("e.g. Toyota, Honda, Ford")
         self.f_model = QLineEdit(); self.f_model.setPlaceholderText("e.g. Fortuner, Civic, Ranger")
         self.f_year  = QSpinBox(); self.f_year.setRange(1900,2030); self.f_year.setValue(2020)
         self.f_color = QLineEdit()
-        self.f_vin   = QLineEdit()
         veh_form.addRow("Plate No. *", self.f_plate)
-        veh_form.addRow("Make",        self.f_make)
+        veh_form.addRow("Brand",       self.f_make)
         veh_form.addRow("Model",       self.f_model)
         veh_form.addRow("Year",        self.f_year)
         veh_form.addRow("Color",       self.f_color)
-        veh_form.addRow("VIN",         self.f_vin)
-        layout.addLayout(veh_form)
+        content_layout.addLayout(veh_form)
+
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
 
         btns = QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel)
         btns.button(QDialogButtonBox.Save).setStyleSheet("background:#0b1f3a;color:white;border:none;border-radius:6px;padding:6px 18px;font-weight:700;")
@@ -492,45 +586,61 @@ class CustomerVehicleDialog(QDialog):
         if not self.f_plate.text().strip():
             error(self, "Validation", "Plate number is required.")
             return
+        if self.f_payment.currentText() == "Insurance":
+            if not self.f_provider.currentText().strip():
+                error(self, "Validation", "Insurance provider is required.")
+                return
         super().accept()
 
     def get_data(self):
+        is_insured = self.f_payment.currentText() == "Insurance"
         customer = (
             self.f_code.text().strip(),
             self.f_first.text().strip(),
             self.f_last.text().strip(),
             self.f_phone.text().strip(),
             self.f_email.text().strip(),
-            self.f_addr.toPlainText().strip()
+            self.f_addr.toPlainText().strip(),
+            self.f_payment.currentText().strip(),
+            self.f_coverage.currentText().strip(),
+            (self.f_provider.currentText().strip() if is_insured else None),
+            (self.f_loa.value() if is_insured else 0),
+            (self.f_assured.value() if is_insured else 0)
         )
         vehicle = (
             self.f_plate.text().strip(),
             self.f_make.text().strip(),
             self.f_model.text().strip(),
             self.f_year.value(),
-            self.f_color.text().strip(),
-            self.f_vin.text().strip()
+            self.f_color.text().strip()
         )
         return customer, vehicle
 
+    def _toggle_insurance_fields(self):
+        insured = self.f_payment.currentText() == "Insurance"
+        self.provider_label.setVisible(insured); self.f_provider.setVisible(insured)
+        self.loa_label.setVisible(insured); self.f_loa.setVisible(insured)
+        self.assured_label.setVisible(insured); self.f_assured.setVisible(insured)
+
 
 class VehicleDialog(QDialog):
-    """Vehicle dialog — all fields are FREE TEXT (no dropdowns for make/model)."""
+    """Vehicle dialog - all fields are FREE TEXT (no dropdowns for make/model)."""
     def __init__(self, parent, existing=None, owner_id=None, lock_owner=False):
         super().__init__(parent)
         self.setWindowTitle("Vehicle")
-        self.setFixedWidth(440)
+        self.resize(640, 520)
+        self.setMinimumSize(600, 480)
         self.setStyleSheet("QDialog{background:#f3f6fb;font-family:'Segoe UI';}"
                            "QLineEdit,QComboBox,QSpinBox{border:1px solid #d7dee8;border-radius:7px;padding:6px 10px;font-size:13px;background:white;}")
         self._customers = {}
         try:
             conn = get_connection(); cur = conn.cursor()
-            cur.execute("SELECT cust_id, cust_code||' — '||full_name FROM customers ORDER BY cust_code")
+            cur.execute("SELECT cust_id, cust_code||' - '||full_name FROM customers ORDER BY cust_code")
             self._customers = {r[1]: r[0] for r in cur.fetchall()}; conn.close()
         except: pass
 
-        layout = QVBoxLayout(self); layout.setContentsMargins(22,18,22,18)
-        form = QFormLayout(); form.setSpacing(10); form.setLabelAlignment(Qt.AlignRight|Qt.AlignVCenter)
+        layout = QVBoxLayout(self); layout.setContentsMargins(28,22,28,22)
+        form = QFormLayout(); form.setSpacing(14); form.setLabelAlignment(Qt.AlignRight|Qt.AlignVCenter)
 
         self.f_cust  = QComboBox(); self.f_cust.addItems(list(self._customers.keys()))
         selected_owner = owner_id if owner_id else (existing[0] if existing else None)
@@ -542,22 +652,20 @@ class VehicleDialog(QDialog):
         # All free-text fields
         self.f_plate = QLineEdit(existing[1] if existing else "")
         self.f_make  = QLineEdit(existing[2] if existing and existing[2] else "")
-        self.f_make.setPlaceholderText("e.g. Toyota, Honda, Ford…")
+        self.f_make.setPlaceholderText("e.g. Toyota, Honda, Ford...")
         self.f_model = QLineEdit(existing[3] if existing and existing[3] else "")
-        self.f_model.setPlaceholderText("e.g. Fortuner, Civic, Ranger…")
+        self.f_model.setPlaceholderText("e.g. Fortuner, Civic, Ranger...")
         self.f_year  = QSpinBox(); self.f_year.setRange(1900,2030)
         self.f_year.setValue(int(existing[4]) if existing and existing[4] else 2020)
         self.f_color = QLineEdit(existing[5] if existing and existing[5] else "")
-        self.f_color.setPlaceholderText("e.g. White, Black, Silver…")
-        self.f_vin   = QLineEdit(existing[6] if existing and existing[6] else "")
+        self.f_color.setPlaceholderText("e.g. White, Black, Silver...")
 
         form.addRow("Owner *",     self.f_cust)
         form.addRow("Plate No. *", self.f_plate)
-        form.addRow("Make",        self.f_make)
+        form.addRow("Brand",       self.f_make)
         form.addRow("Model",       self.f_model)
         form.addRow("Year",        self.f_year)
         form.addRow("Color",       self.f_color)
-        form.addRow("VIN",         self.f_vin)
         layout.addLayout(form)
 
         btns = QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel)
@@ -570,7 +678,7 @@ class VehicleDialog(QDialog):
         cid = self._customers.get(self.f_cust.currentText())
         return (cid, self.f_plate.text().strip(), self.f_make.text().strip(),
                 self.f_model.text().strip(), self.f_year.value(),
-                self.f_color.text().strip(), self.f_vin.text().strip())
+                self.f_color.text().strip())
 
 
 class CustomerVehiclesDialog(QDialog):
@@ -598,13 +706,12 @@ class CustomerVehiclesDialog(QDialog):
         toolbar.addWidget(btn_close); toolbar.addWidget(btn_add)
         layout.addLayout(toolbar)
 
-        self.table = StyledTable(["Plate No.","Make","Model","Year","Color","VIN","Actions"])
+        self.table = StyledTable(["Plate No.","Brand","Model","Year","Color","Actions"])
         self.table.setColumnWidth(0, 100)
         self.table.setColumnWidth(1, 100)
         self.table.setColumnWidth(2, 110)
         self.table.setColumnWidth(3, 60)
         self.table.setColumnWidth(4, 90)
-        self.table.setColumnWidth(5, 140)
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
         self._load()
@@ -616,7 +723,7 @@ class CustomerVehiclesDialog(QDialog):
             customer = cur.fetchone()
             cur.execute("""
                 SELECT vehicle_id, plate_no, COALESCE(make,''), COALESCE(model,''),
-                       COALESCE(CAST(year AS TEXT),''), COALESCE(color,''), COALESCE(vin,'')
+                       COALESCE(CAST(year AS TEXT),''), COALESCE(color,'')
                 FROM vehicles
                 WHERE cust_id=%s
                 ORDER BY plate_no
@@ -632,7 +739,7 @@ class CustomerVehiclesDialog(QDialog):
         for rd in rows:
             r = self.table.rowCount()
             self.table.insertRow(r); self.table.setRowHeight(r, 38)
-            for c, val in enumerate(rd[1:7]):
+            for c, val in enumerate(rd[1:6]):
                 item = QTableWidgetItem(str(val) if val else "")
                 item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
                 self.table.setItem(r, c, item)
@@ -647,7 +754,7 @@ class CustomerVehiclesDialog(QDialog):
             btn_d.setStyleSheet("QPushButton{background:#ffebee;color:#c62828;border:1px solid #ef9a9a;border-radius:5px;font-size:11px;padding:0 8px;}QPushButton:hover{background:#ffcdd2;}")
             btn_d.clicked.connect(lambda _, v_=vehicle_id: self._delete_vehicle(v_))
             al.addWidget(btn_e); al.addWidget(btn_d)
-            self.table.setCellWidget(r, 6, act)
+            self.table.setCellWidget(r, 5, act)
         self.count.setText(f"{len(rows)} vehicle(s)")
 
     def _add_vehicle(self):
@@ -661,3 +768,4 @@ class CustomerVehiclesDialog(QDialog):
     def _delete_vehicle(self, vehicle_id):
         self.page._delete_vehicle(vehicle_id)
         self._load()
+

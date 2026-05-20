@@ -141,6 +141,11 @@ CREATE TABLE IF NOT EXISTS customers (
     phone        VARCHAR(30),
     email        VARCHAR(120),
     address      TEXT,
+    payment_type VARCHAR(20) NOT NULL DEFAULT 'Cash' CHECK (payment_type IN ('Cash','Insurance')),
+    coverage_type VARCHAR(30) NOT NULL DEFAULT 'Own Damage' CHECK (coverage_type IN ('Own Damage','Property Damage')),
+    insurance_provider VARCHAR(160),
+    loa_amount   NUMERIC(12,2) DEFAULT 0,
+    assured_share NUMERIC(12,2) DEFAULT 0,
     created_at   TIMESTAMP DEFAULT NOW()
 );
 
