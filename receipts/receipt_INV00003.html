@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Receipt INV00003</title>
+<style>
+body { font-family: Arial, sans-serif; color: #101820; margin: 0; background: #f3f6fb; }
+.receipt { width: 760px; margin: 24px auto; padding: 28px; background: #fff; border: 1px solid #d7dee8; }
+.top { display: flex; justify-content: space-between; border-bottom: 2px solid #0b1f3a; padding-bottom: 14px; }
+h1 { margin: 0; font-size: 26px; color: #0b1f3a; letter-spacing: 0; }
+.muted { color: #687487; font-size: 12px; line-height: 1.5; }
+.receipt-no { text-align: right; font-size: 13px; }
+.paid { display: inline-block; margin-top: 8px; padding: 5px 10px; border: 1px solid #2e7d32; color: #2e7d32; font-weight: 700; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 20px 0; }
+.box { border: 1px solid #d7dee8; padding: 12px; }
+.label { color: #687487; font-size: 11px; text-transform: uppercase; margin-bottom: 5px; }
+table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+th { text-align: left; color: #687487; font-size: 11px; border-bottom: 1px solid #d7dee8; padding: 8px; }
+td { border-bottom: 1px solid #e8edf4; padding: 9px 8px; font-size: 13px; }
+.num { text-align: right; }
+.totals { margin-left: auto; width: 330px; margin-top: 18px; }
+.totals td { border: none; padding: 5px 0; }
+.grand td { font-size: 17px; font-weight: 700; border-top: 2px solid #0b1f3a; padding-top: 10px; }
+.footer { margin-top: 28px; text-align: center; color: #687487; font-size: 12px; }
+@media print { body { background: #fff; } .receipt { width: auto; margin: 0; border: none; } }
+</style>
+</head>
+<body>
+<div class="receipt">
+    <div class="top">
+        <div>
+            <h1>UnoCarshop</h1>
+            <div class="muted">Auto Shop Management & Information System<br>OFFICIAL SERVICE RECEIPT</div>
+        </div>
+        <div class="receipt-no">
+            <strong>SERVICE INVOICE NO.: INV00003</strong><br>
+            DATE: 2026-05-21<br>
+            ISSUED: 2026-05-21 08:51 PM<br>
+            <span class="paid">Paid</span>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="box">
+            <div class="label">SOLD TO</div>
+            <strong>Evriel Lucero</strong><br>
+            <span class="muted">ADDRESS: Liloan</span><br>
+            <span class="muted">TIN: 210-8910-918-000</span>
+        </div>
+        <div class="box">
+            <div class="label">TRANSACTION DETAILS</div>
+            Order No: <strong>N/A</strong><br>
+            Vehicle: <strong>N/A</strong><br>
+            Payment: <strong>Cash</strong>
+        </div>
+    </div>
+
+    <div class="label">IN PAYMENT OF THE FOLLOWING SERVICE / TRANSACTION / DESCRIPTION:</div>
+    <table>
+        <thead>
+            <tr><th>Description</th><th class="num">Qty</th><th class="num">Unit Price</th><th class="num">Amount</th></tr>
+        </thead>
+        <tbody>
+            
+                <tr>
+                    <td>Parts / Services</td>
+                    <td class="num">1</td>
+                    <td class="num">PHP 16,500.00</td>
+                    <td class="num">PHP 16,500.00</td>
+                </tr>
+            
+            <tr>
+                <td>Manpower / Labor</td>
+                <td class="num">1</td>
+                <td class="num">PHP 8,000.00</td>
+                <td class="num">PHP 8,000.00</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <table class="totals">
+        <tr><td>AMOUNT</td><td class="num">PHP 24,500.00</td></tr>
+        <tr><td>TOTAL SALES</td><td class="num">PHP 24,500.00</td></tr>
+        <tr><td>LESS: 12% VAT</td><td class="num">PHP 2,625.00</td></tr>
+        <tr><td>Net of VAT / Total</td><td class="num">PHP 21,875.00</td></tr>
+        <tr><td>TOTAL AMOUNT DUE</td><td class="num">PHP 24,500.00</td></tr>
+        <tr class="grand"><td>TOTAL</td><td class="num">PHP 24,500.00</td></tr>
+        <tr><td>Amount Paid</td><td class="num">PHP 24,500.00</td></tr>
+        <tr><td>Balance</td><td class="num">PHP 0.00</td></tr>
+    </table>
+
+    <div class="footer">
+        Issued by Administrator. Thank you for your business.
+    </div>
+</div>
+</body>
+</html>
